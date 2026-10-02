@@ -1,0 +1,212 @@
+<!doctype html>
+<html lang="vi">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>HomeMesh MVP</title>
+  <meta name="description" content="HomeMesh MVP - demo điều khiển đèn LED CCT 2700–6500K qua Gateway và BLE Mesh, mục tiêu độ trễ dưới 50 ms." />
+  <meta name="theme-color" content="#0E1116" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2214%22 fill=%22%23FFB547%22/%3E%3C/svg%3E" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script type="module" src="js/app.js"></script>
+</head>
+<body>
+  <div class="app">
+    <nav class="nav" aria-label="Điều hướng chính">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <div>
+          <strong>HomeMesh</strong>
+          <small>BLE Mesh Lighting</small>
+        </div>
+      </div>
+      <button class="nav-item is-active" data-view="home" type="button"><span aria-hidden="true">⌂</span><span>Trang chủ</span></button>
+      <button class="nav-item" data-view="scenes" type="button"><span aria-hidden="true">✦</span><span>Cảnh</span></button>
+      <button class="nav-item" data-view="mesh" type="button"><span aria-hidden="true">⬡</span><span>Mạng Mesh</span></button>
+      <button class="nav-item" data-view="log" type="button"><span aria-hidden="true">≡</span><span>Nhật ký</span></button>
+      <div class="nav-gateway" id="nav-gateway">
+        <span class="dot"></span>
+        <div>
+          <strong>Gateway GW-01</strong>
+          <small id="nav-gateway-text">Online · 0x0001</small>
+        </div>
+      </div>
+    </nav>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow" id="view-eyebrow">Nhà của tôi</p>
+          <h1 id="view-title">Trang chủ</h1>
+        </div>
+        <div class="topbar-controls">
+          <div class="segmented" role="radiogroup" aria-label="Đường truyền lệnh" id="path-control">
+            <button type="button" role="radio" data-path="local">LAN</button>
+            <button type="button" role="radio" data-path="proxy">BLE</button>
+            <button type="button" role="radio" data-path="cloud">Cloud</button>
+          </div>
+          <div class="latency-pill" id="latency-pill" title="Độ trễ lệnh gần nhất (mục tiêu < 50 ms)">
+            <span class="dot"></span><span id="latency-pill-text">— ms</span>
+          </div>
+        </div>
+      </header>
+
+      <!-- TRANG CHỦ -->
+      <section class="view is-active" id="view-home" aria-labelledby="view-title">
+        <div class="summary" id="summary"></div>
+        <div class="chips" id="room-filter" role="tablist" aria-label="Lọc theo phòng"></div>
+        <div id="rooms"></div>
+      </section>
+
+      <!-- CẢNH -->
+      <section class="view" id="view-scenes">
+        <div class="panel-head">
+          <p class="muted">Cảnh được lưu sẵn trong Scene Server của từng đèn. App chỉ gửi <b>1 gói Scene Recall</b> tới địa chỉ group → mọi đèn đổi cùng lúc.</p>
+          <label class="select-wrap">Phạm vi
+            <select id="scene-scope"></select>
+          </label>
+        </div>
+        <div class="scene-grid" id="scene-grid"></div>
+      </section>
+
+      <!-- MẠNG MESH -->
+      <section class="view" id="view-mesh">
+        <div class="mesh-layout">
+          <div class="card topo-card">
+            <div class="card-head">
+              <h2>Sơ đồ mạng</h2>
+              <div class="legend">
+                <span><i class="lg lg-gw"></i>Gateway</span>
+                <span><i class="lg lg-relay"></i>Relay</span>
+                <span><i class="lg lg-node"></i>Node</span>
+              </div>
+            </div>
+            <svg id="topology" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Sơ đồ mạng BLE Mesh"></svg>
+            <div class="card-actions">
+              <label class="switch-row"><input type="checkbox" id="gateway-online" checked /><span class="switch" aria-hidden="true"></span>Gateway online</label>
+              <button class="btn" id="btn-ping" type="button">Ping toàn mạng</button>
+              <button class="btn btn-primary" id="btn-provision" type="button">+ Thêm đèn</button>
+            </div>
+          </div>
+
+          <div class="mesh-side">
+            <div class="card">
+              <div class="card-head">
+                <h2>Độ trễ đầu-cuối</h2>
+                <span class="tag" id="target-tag">Mục tiêu &lt; 50 ms</span>
+              </div>
+              <div class="stats" id="latency-stats"></div>
+              <svg id="sparkline" class="sparkline" viewBox="0 0 300 90" preserveAspectRatio="none" aria-label="Biểu đồ độ trễ"></svg>
+              <div class="card-actions">
+                <button class="btn" id="btn-stress" type="button">Stress test 100 lệnh</button>
+                <button class="btn btn-ghost" id="btn-reset-stats" type="button">Xoá số liệu</button>
+              </div>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>Phân rã lệnh gần nhất</h2><span class="muted small" id="breakdown-target"></span></div>
+              <div id="breakdown" class="breakdown"></div>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Danh sách node</h2><span class="muted small" id="node-count"></span></div>
+          <div class="table-wrap">
+            <table class="table" id="node-table">
+              <thead><tr><th>Đèn</th><th>Unicast</th><th>Group</th><th>Hop</th><th>Relay</th><th>RSSI</th><th>Công suất</th><th>Trạng thái</th></tr></thead>
+              <tbody></tbody>
+            </table>
+          </div>
+        </div>
+      </section>
+
+      <!-- NHẬT KÝ -->
+      <section class="view" id="view-log">
+        <div class="panel-head">
+          <p class="muted">Mỗi thao tác trên UI → 1 Access Message BLE Mesh. Kéo thanh trượt gửi <b>Unack</b> (giới hạn 1 gói / 60 ms), thả tay gửi <b>Ack</b> để chốt trạng thái.</p>
+          <div class="row-gap">
+            <button class="btn" id="btn-export" type="button">Xuất JSON</button>
+            <button class="btn btn-ghost" id="btn-clear-log" type="button">Xoá</button>
+          </div>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table class="table mono" id="log-table">
+              <thead><tr><th>Thời gian</th><th>Đường</th><th>Src → Dst</th><th>Opcode</th><th>Access payload</th><th>Seg</th><th>TTL</th><th>Độ trễ</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <p class="empty" id="log-empty">Chưa có gói tin nào. Hãy bật/tắt hoặc kéo thanh màu một đèn.</p>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- CHI TIẾT ĐÈN -->
+  <dialog class="sheet" id="device-sheet" aria-labelledby="sheet-title">
+    <form method="dialog" class="sheet-close-form"><button class="icon-btn" aria-label="Đóng">✕</button></form>
+    <div class="sheet-body">
+      <div class="lamp-stage">
+        <div class="lamp" id="sheet-lamp"><div class="lamp-core"></div></div>
+      </div>
+      <div class="sheet-head">
+        <div>
+          <p class="eyebrow" id="sheet-room"></p>
+          <h2 id="sheet-title"></h2>
+        </div>
+        <label class="switch-row big"><input type="checkbox" id="sheet-on" /><span class="switch" aria-hidden="true"></span></label>
+      </div>
+
+      <div class="control">
+        <div class="control-label"><span>Độ sáng</span><output id="sheet-lightness-out"></output></div>
+        <input type="range" class="range range-light" id="sheet-lightness" min="1" max="100" step="1" aria-label="Độ sáng" />
+      </div>
+
+      <div class="control">
+        <div class="control-label"><span>Nhiệt độ màu</span><output id="sheet-kelvin-out"></output></div>
+        <input type="range" class="range range-cct" id="sheet-kelvin" min="2700" max="6500" step="50" aria-label="Nhiệt độ màu" />
+        <div class="cct-ticks" aria-hidden="true"><span>2700K</span><span>3500K</span><span>4500K</span><span>5500K</span><span>6500K</span></div>
+      </div>
+
+      <div class="chips presets" id="sheet-presets"></div>
+
+      <div class="info-grid">
+        <div><small>PWM ấm (2700K)</small><b id="sheet-warm"></b></div>
+        <div><small>PWM lạnh (6500K)</small><b id="sheet-cool"></b></div>
+        <div><small>Công suất ước tính</small><b id="sheet-power"></b></div>
+        <div><small>Màu hiển thị</small><b id="sheet-hex"></b></div>
+        <div><small>Unicast / Group</small><b id="sheet-addr"></b></div>
+        <div><small>Số hop từ gateway</small><b id="sheet-hops"></b></div>
+      </div>
+
+      <div class="packet">
+        <div class="control-label"><span>Gói tin gần nhất</span><output id="sheet-latency"></output></div>
+        <code id="sheet-packet">—</code>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- PROVISIONING -->
+  <dialog class="sheet" id="provision-dialog" aria-labelledby="prov-title">
+    <form method="dialog" class="sheet-close-form"><button class="icon-btn" aria-label="Đóng">✕</button></form>
+    <div class="sheet-body">
+      <p class="eyebrow">Provisioning BLE Mesh</p>
+      <h2 id="prov-title">Thêm đèn mới</h2>
+      <div id="prov-scan">
+        <p class="muted">Gateway đang quét thiết bị chưa vào mạng…</p>
+        <ul class="candidate-list" id="prov-candidates"></ul>
+      </div>
+      <div id="prov-run" hidden>
+        <label class="select-wrap">Gán vào phòng <select id="prov-room"></select></label>
+        <ol class="steps" id="prov-steps"></ol>
+        <button class="btn btn-primary full" id="prov-start" type="button">Bắt đầu provisioning</button>
+      </div>
+    </div>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
