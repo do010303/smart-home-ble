@@ -8,17 +8,20 @@ Demo và thiết kế MVP cho hệ thống chiếu sáng thông minh (web + app)
 
 ## Chức năng demo
 
-| Màn hình      | Nội dung                                                                                                                                                   |
-| --------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Trang chủ      | Bật/tắt, độ sáng, màu cho từng đèn và cả phòng (1 gói group)                                                                                   |
-| Chi tiết đèn | Slider gradient 2700–6500 K, preset, PWM kênh ấm/lạnh, công suất, gói tin hex                                                                        |
-| Cảnh           | 6 cảnh, gọi cho toàn nhà hoặc từng phòng (Scene Recall)                                                                                              |
-| Mạng Mesh      | Sơ đồ topology có hiệu ứng lan gói, thống kê độ trễ (TB/P95/Max/% < 50 ms), stress test, ping, mô phỏng mất gateway, provisioning đèn mới |
-| Nhật ký       | Access message thật (opcode, payload little-endian, segment, TTL), xuất JSON                                                                              |
+| Màn hình | Nội dung |
+| --- | --- |
+| Trang chủ | Bật/tắt, độ sáng, màu cho từng đèn và cả phòng (1 gói group) |
+| Sơ đồ nhà (Mặt bằng) | Layout mặt bằng kiến trúc 2D (4 phòng), quầng sáng CCT theo Kelvin & độ sáng thật, bật/tắt trực tiếp trên bản vẽ, bảng tổng kết năng lượng |
+| Chi tiết đèn | Slider gradient 2700–6500 K, preset, PWM kênh ấm/lạnh, công suất, gói tin hex |
+| Cảnh | 6 cảnh, gọi cho toàn nhà hoặc từng phòng (Scene Recall) |
+| Mạng Mesh & Jitter | Sơ đồ topology có hiệu ứng lan gói, đo độ trễ & **Jitter (TB/P95/Max)**, đo độ trễ lệnh phản hồi (Round-Trip Ack), kịch bản mô phỏng thao tác, stress test, ping, mô phỏng mất gateway, provisioning đèn mới |
+| API Gateway | Console thử nghiệm REST API Gateway v1 (GET, PUT, POST), mẫu cURL, xem JSON response, hỗ trợ gọi qua `window.HomeMeshAPI` |
+| Nhật ký | Access message thật (opcode, payload little-endian, segment, TTL), xuất JSON |
+| Giao diện | Nút chuyển đổi nhanh **Sáng (Light Mode)** và **Tối (Dark Mode)** |
 
 Có 3 đường truyền để so sánh: **LAN** (gateway), **BLE** (GATT Proxy), **Cloud**.
 
-> Tầng BLE Mesh được **mô phỏng** (chưa cần phần cứng). Gói tin được mã hoá đúng đặc tả SIG Mesh Model; độ trễ lấy từ mô hình giả định trong `js/mesh.js` → `LATENCY_PROFILE`, cần đo lại trên phần cứng thật.
+> Tầng BLE Mesh được **mô phỏng** (chưa cần phần cứng). Gói tin được mã hoá đúng đặc tả SIG Mesh Model; độ trễ và Jitter lấy từ mô hình trong `js/mesh.js`, cần đo lại trên phần cứng thật.
 
 ## Cấu trúc
 
@@ -27,10 +30,11 @@ smart-home-ble/
 ├── index.html
 ├── css/style.css
 ├── js/
-│   ├── app.js        # UI + state + luồng
+│   ├── app.js        # UI + state + luồng điều khiển
+│   ├── api.js        # REST & WebSocket API Gateway simulation + window.HomeMeshAPI
 │   ├── cct.js        # màu & driver (Kelvin → RGB, trộn PWM, công suất)
-│   ├── mesh.js       # gói tin BLE Mesh, mô hình độ trễ, thống kê
-│   └── data.js       # phòng, đèn, cảnh mẫu
+│   ├── mesh.js       # gói tin BLE Mesh, mô hình độ trễ, Jitter, thống kê
+│   └── data.js       # phòng, đèn, tọa độ mặt bằng nhà, cảnh mẫu
 ├── docs/
 │   ├── ARCHITECTURE.md   # kiến trúc, stack, ngân sách độ trễ
 │   ├── FLOWS.md          # luồng hoạt động (sequence diagram)

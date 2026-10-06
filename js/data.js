@@ -3,23 +3,58 @@
 import { roomGroupAddress } from './mesh.js';
 
 export const ROOMS = Object.freeze([
-  { id: 'living', name: 'Phòng khách', icon: '🛋️', group: roomGroupAddress(0) },
-  { id: 'bedroom', name: 'Phòng ngủ', icon: '🛏️', group: roomGroupAddress(1) },
-  { id: 'kitchen', name: 'Bếp', icon: '🍳', group: roomGroupAddress(2) },
-  { id: 'office', name: 'Phòng làm việc', icon: '💻', group: roomGroupAddress(3) }
+  {
+    id: 'living',
+    name: 'Phòng khách',
+    icon: '🛋️',
+    group: roomGroupAddress(0),
+    area: 32,
+    bounds: { x: 4, y: 50, w: 44, h: 46 },
+    labelPos: { x: 26, y: 57 }
+  },
+  {
+    id: 'bedroom',
+    name: 'Phòng ngủ',
+    icon: '🛏️',
+    group: roomGroupAddress(1),
+    area: 20,
+    bounds: { x: 4, y: 4, w: 44, h: 44 },
+    labelPos: { x: 26, y: 11 }
+  },
+  {
+    id: 'kitchen',
+    name: 'Bếp & Bàn ăn',
+    icon: '🍳',
+    group: roomGroupAddress(2),
+    area: 24,
+    bounds: { x: 50, y: 4, w: 46, h: 44 },
+    labelPos: { x: 73, y: 11 }
+  },
+  {
+    id: 'office',
+    name: 'Phòng làm việc',
+    icon: '💻',
+    group: roomGroupAddress(3),
+    area: 18,
+    bounds: { x: 50, y: 50, w: 46, h: 46 },
+    labelPos: { x: 73, y: 57 }
+  }
 ]);
 
+export const GATEWAY_FLOORPLAN_POS = Object.freeze({ x: 48, y: 48 });
+
 // via: node cha trong cây relay ('gateway' = nhận trực tiếp từ gateway).
-// x, y: vị trí trên sơ đồ mạng (0–100).
+// x, y: vị trí trên sơ đồ mạng topology (0–100).
+// fx, fy: vị trí trên sơ đồ mặt bằng nhà floorplan (0–100).
 export const DEFAULT_LIGHTS = Object.freeze([
-  { id: 'L1', name: 'Đèn trần chính', room: 'living', unicast: 0x0002, watts: 18, via: 'gateway', relay: true, x: 30, y: 30 },
-  { id: 'L2', name: 'Đèn hắt trần', room: 'living', unicast: 0x0003, watts: 12, via: 'gateway', relay: false, x: 18, y: 55 },
-  { id: 'L3', name: 'Đèn bàn ăn', room: 'kitchen', unicast: 0x0004, watts: 12, via: 'gateway', relay: true, x: 70, y: 28 },
-  { id: 'L4', name: 'Đèn bếp', room: 'kitchen', unicast: 0x0005, watts: 18, via: 'L3', relay: false, x: 88, y: 12 },
-  { id: 'L5', name: 'Đèn ngủ trần', room: 'bedroom', unicast: 0x0006, watts: 12, via: 'L1', relay: true, x: 20, y: 10 },
-  { id: 'L6', name: 'Đèn đầu giường', room: 'bedroom', unicast: 0x0007, watts: 12, via: 'L5', relay: false, x: 6, y: 30 },
-  { id: 'L7', name: 'Đèn bàn làm việc', room: 'office', unicast: 0x0008, watts: 18, via: 'L3', relay: true, x: 78, y: 62 },
-  { id: 'L8', name: 'Đèn trần văn phòng', room: 'office', unicast: 0x0009, watts: 18, via: 'L7', relay: false, x: 90, y: 86 }
+  { id: 'L1', name: 'Đèn trần chính', room: 'living', unicast: 0x0002, watts: 18, via: 'gateway', relay: true, x: 30, y: 30, fx: 26, fy: 70 },
+  { id: 'L2', name: 'Đèn hắt trần', room: 'living', unicast: 0x0003, watts: 12, via: 'gateway', relay: false, x: 18, y: 55, fx: 14, fy: 84 },
+  { id: 'L3', name: 'Đèn bàn ăn', room: 'kitchen', unicast: 0x0004, watts: 12, via: 'gateway', relay: true, x: 70, y: 28, fx: 66, fy: 26 },
+  { id: 'L4', name: 'Đèn bếp', room: 'kitchen', unicast: 0x0005, watts: 18, via: 'L3', relay: false, x: 88, y: 12, fx: 84, fy: 16 },
+  { id: 'L5', name: 'Đèn ngủ trần', room: 'bedroom', unicast: 0x0006, watts: 12, via: 'L1', relay: true, x: 20, y: 10, fx: 24, fy: 20 },
+  { id: 'L6', name: 'Đèn đầu giường', room: 'bedroom', unicast: 0x0007, watts: 12, via: 'L5', relay: false, x: 6, y: 30, fx: 12, fy: 36 },
+  { id: 'L7', name: 'Đèn bàn làm việc', room: 'office', unicast: 0x0008, watts: 18, via: 'L3', relay: true, x: 78, y: 62, fx: 68, fy: 70 },
+  { id: 'L8', name: 'Đèn trần văn phòng', room: 'office', unicast: 0x0009, watts: 18, via: 'L7', relay: false, x: 90, y: 86, fx: 84, fy: 82 }
 ]);
 
 export const DEFAULT_LIGHT_STATE = Object.freeze({ on: true, lightness: 70, kelvin: 4000 });

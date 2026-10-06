@@ -6,7 +6,8 @@ import {
   MESH_LIMITS, LATENCY_PROFILE, computeHops, createTidCounter, encodeLightCtlSet, encodeOnOffSet,
   encodeSceneRecall, latencyStats, opcodeName, segmentsNeeded, simulateGroupLatency, simulateLatency, toHex
 } from '../js/mesh.js';
-import { DEFAULT_LIGHTS } from '../js/data.js';
+import { DEFAULT_LIGHTS, ROOMS } from '../js/data.js';
+import { executeApiRequest } from '../js/api.js';
 
 let passed = 0;
 const test = (name, fn) => { fn(); passed += 1; console.log(`✓ ${name}`); };
@@ -111,12 +112,66 @@ test('Lệnh group lấy độ trễ của đèn chậm nhất', () => {
   assert.equal(g.total, Math.max(...g.perNode.map((p) => p.total)));
 });
 
-test('Thống kê latency', () => {
+test('Thống kê latency & Jitter (Mean delay variation RFC 3550)', () => {
   const s = latencyStats([10, 20, 30, 40, 60]);
   assert.equal(s.avg, 32);
   assert.equal(s.max, 60);
   assert.equal(s.withinTarget, 80);
+  assert.equal(s.min, 10);
+  assert.equal(s.jitterAvg, 12.5); // (|20-10| + |30-20| + |40-30| + |60-40|) / 4 = (10+10+10+20)/4 = 12.5
+  assert.equal(s.jitterMax, 20);
+  assert.equal(s.jitterCurrent, 20);
   assert.equal(latencyStats([]).count, 0);
+});
+
+test('Lệnh Ack đo độ trễ vòng lặp Round-Trip (Tx + Rx Status)', () => {
+  const unack = simulateLatency({ hops: 2, path: 'local', ack: false }, worst);
+  const ack = simulateLatency({ hops: 2, path: 'local', ack: true }, worst);
+  assert.ok(ack.total > unack.total, 'Ack latency phải lớn hơn Unack do có chặng phản hồi Status');
+  assert.ok(ack.isAck === true);
+});
+
+test('Sơ đồ mặt bằng nhà: Tọa độ đèn (fx, fy) nằm gọn trong từng phòng', () => {
+  for (const light of DEFAULT_LIGHTS) {
+    const room = ROOMS.find((r) => r.id === light.room);
+    assert.ok(room, `Đèn ${light.id} phải thuộc một phòng hợp lệ`);
+    assert.ok(light.fx >= room.bounds.x && light.fx <= room.bounds.x + room.bounds.w, `Đèn ${light.id} fx nằm trong phòng ${room.name}`);
+    assert.ok(light.fy >= room.bounds.y && light.fy <= room.bounds.y + room.bounds.h, `Đèn ${light.id} fy nằm trong phòng ${room.name}`);
+  }
+});
+
+test('Mô phỏng API Gateway: GET /lights và PUT /lights hoạt động chuẩn REST', () => {
+  const fakeState = {
+    lights: DEFAULT_LIGHTS.map((l) => ({ ...l, on: false, lightness: 50, kelvin: 3000 })),
+    samples: [20, 25],
+    path: 'local',
+    gatewayOnline: true
+  };
+  const fakeContext = {
+    state: fakeState,
+    lightById: (id) => fakeState.lights.find((l) => l.id === id),
+    roomLights: (r) => fakeState.lights.filter((l) => l.room === r),
+    setLight: (id, patch) => { Object.assign(fakeState.lights.find((l) => l.id === id), patch); },
+    setRoom: () => {},
+    recallScene: () => {},
+    latencyStats: () => ({ avg: 22 }),
+    SCENES: [],
+    NEW_DEVICE_CANDIDATES: []
+  };
+
+  const getRes = executeApiRequest({ method: 'GET', path: '/api/v1/lights', context: fakeContext });
+  assert.equal(getRes.status, 200);
+  assert.equal(getRes.body.count, 8);
+
+  const putRes = executeApiRequest({
+    method: 'PUT',
+    path: '/api/v1/lights/L1',
+    body: { on: true, kelvin: 5000, lightness: 90 },
+    context: fakeContext
+  });
+  assert.equal(putRes.status, 200);
+  assert.equal(fakeState.lights.find((l) => l.id === 'L1').on, true);
+  assert.equal(fakeState.lights.find((l) => l.id === 'L1').kelvin, 5000);
 });
 
 console.log(`\n${passed} test passed.`);

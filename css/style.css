@@ -1,4 +1,4 @@
-:root {
+:root, [data-theme="dark"] {
   --bg: #0e1116;
   --surface: #161a21;
   --surface-2: #1d222b;
@@ -19,6 +19,24 @@
   --mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', Menlo, monospace;
   --nav-w: 232px;
   color-scheme: dark;
+}
+
+[data-theme="light"] {
+  --bg: #f8fafc;
+  --surface: #ffffff;
+  --surface-2: #f1f5f9;
+  --surface-3: #e2e8f0;
+  --border: #cbd5e1;
+  --text: #0f172a;
+  --muted: #64748b;
+  --accent: #d97706;
+  --accent-ink: #ffffff;
+  --ok: #16a34a;
+  --warn: #d97706;
+  --bad: #dc2626;
+  --link: #2563eb;
+  --shadow: 0 8px 24px rgba(0, 0, 0, 0.08);
+  color-scheme: light;
 }
 
 * { box-sizing: border-box; }
@@ -405,6 +423,137 @@ select {
   opacity: 0; pointer-events: none; transition: opacity 0.2s, transform 0.2s; z-index: 50;
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ---------- Theme Switcher ---------- */
+.theme-toggle-btn {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 6px 12px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border);
+  color: var(--text); font-size: 13px; font-weight: 600;
+  cursor: pointer; transition: all 0.15s ease;
+}
+.theme-toggle-btn:hover { background: var(--surface-2); border-color: var(--accent); }
+
+/* ---------- Sơ đồ mặt bằng nhà (Floorplan Layout) ---------- */
+.floorplan-toolbar {
+  display: flex; justify-content: space-between; align-items: center; gap: 16px; flex-wrap: wrap;
+  margin-bottom: 18px;
+}
+.floorplan-options { display: flex; gap: 16px; align-items: center; flex-wrap: wrap; }
+.floorplan-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+
+.floorplan-grid {
+  display: grid; grid-template-columns: minmax(0, 1.4fr) minmax(0, 1fr); gap: 16px; margin-bottom: 20px;
+}
+.floorplan-card { display: flex; flex-direction: column; }
+.floorplan-stage {
+  flex: 1; display: flex; align-items: center; justify-content: center;
+  background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  padding: 12px; min-height: 440px; position: relative; overflow: hidden;
+}
+#floorplan-svg { width: 100%; height: auto; max-height: 500px; aspect-ratio: 1 / 1; display: block; }
+.floorplan-hint { margin-top: 10px; }
+
+/* SVG Floorplan architectural elements */
+#floorplan-svg .fp-bg { fill: var(--surface-2); }
+#floorplan-svg .fp-outer-wall { fill: none; stroke: var(--border); stroke-width: 1.2; }
+#floorplan-svg .fp-inner-wall { stroke: var(--border); stroke-width: 0.9; stroke-linecap: round; }
+#floorplan-svg .fp-door { stroke: var(--muted); stroke-width: 0.5; stroke-dasharray: 1 1; }
+#floorplan-svg .fp-window { stroke: var(--link); stroke-width: 0.8; opacity: 0.6; }
+
+#floorplan-svg .room-zone { fill: transparent; transition: fill 0.2s; }
+#floorplan-svg .room-zone:hover { fill: rgba(255, 255, 255, 0.03); }
+#floorplan-svg .room-tag-bg { fill: var(--surface); stroke: var(--border); stroke-width: 0.3; rx: 1.5; }
+#floorplan-svg .room-tag-text { fill: var(--text); font-size: 2.8px; font-weight: 700; font-family: var(--font); text-anchor: middle; }
+#floorplan-svg .room-tag-area { fill: var(--muted); font-size: 2.1px; font-family: var(--font); text-anchor: middle; }
+
+/* Light Cones / CCT Radial Glow */
+#floorplan-svg .fp-glow { pointer-events: none; mix-blend-mode: screen; transition: opacity 0.25s ease; }
+[data-theme="light"] #floorplan-svg .fp-glow { mix-blend-mode: multiply; }
+#floorplan-svg .fp-fixture { cursor: pointer; }
+#floorplan-svg .fp-fixture-base { fill: var(--surface); stroke: var(--border); stroke-width: 0.4; }
+#floorplan-svg .fp-fixture.relay .fp-fixture-ring { stroke: var(--accent); stroke-width: 0.5; }
+#floorplan-svg .fp-fixture-core { transition: fill 0.15s, r 0.15s; }
+#floorplan-svg .fp-fixture:hover .fp-fixture-core { r: 3.4; }
+#floorplan-svg .fp-fixture-label { fill: var(--muted); font-size: 2.3px; font-family: var(--mono); text-anchor: middle; pointer-events: none; }
+#floorplan-svg .fp-fixture.is-off .fp-fixture-core { fill: var(--surface-3); }
+
+#floorplan-svg .fp-mesh-link { stroke: var(--border); stroke-width: 0.4; stroke-dasharray: 1.5 1.5; opacity: 0.5; }
+#floorplan-svg .fp-mesh-link.flash { stroke: var(--accent); stroke-width: 0.8; stroke-dasharray: none; opacity: 1; }
+
+#floorplan-svg .fp-gw-core { fill: var(--link); }
+#floorplan-svg .fp-gw-pulse { fill: none; stroke: var(--link); stroke-width: 0.4; opacity: 0; }
+#floorplan-svg .fp-gw-pulse.go { animation: pulse 0.6s ease-out; }
+
+/* Floorplan Sidebar & Rooms summary */
+.floorplan-sidebar { display: flex; flex-direction: column; gap: 16px; }
+.floorplan-rooms-list { display: flex; flex-direction: column; gap: 8px; margin-top: 6px; }
+.fp-room-item {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 10px 12px; background: var(--surface-2); border-radius: var(--radius-sm); border: 1px solid var(--border);
+}
+.fp-room-info { display: flex; align-items: center; gap: 10px; }
+.fp-room-info strong { display: block; font-size: 13.5px; }
+.fp-room-info small { color: var(--muted); font-size: 11px; }
+.fp-room-stats { text-align: right; font-family: var(--mono); font-size: 12px; }
+.fp-room-stats b { display: block; color: var(--text); }
+.fp-room-stats small { color: var(--muted); font-size: 10.5px; }
+
+/* ---------- Mô phỏng Jitter & Kịch bản ---------- */
+.simulation-box { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--border); }
+.simulation-box .card-actions { margin-top: 8px; }
+.stat.jitter-ok b { color: var(--ok); }
+.stat.jitter-warn b { color: var(--warn); }
+.stat.jitter-bad b { color: var(--bad); }
+
+/* ---------- API Gateway Console ---------- */
+.api-layout { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; margin-bottom: 20px; }
+.api-left, .api-right { display: flex; flex-direction: column; gap: 16px; }
+
+.api-catalog-list { display: flex; flex-direction: column; gap: 8px; max-height: 290px; overflow-y: auto; }
+.api-endpoint-card {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 9px 12px; background: var(--surface-2); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  text-align: left; cursor: pointer; transition: all 0.15s ease;
+}
+.api-endpoint-card:hover { border-color: var(--accent); background: var(--surface-3); }
+.api-endpoint-card.is-active { border-color: var(--accent); background: var(--surface-3); }
+.api-endpoint-info { min-width: 0; }
+.api-endpoint-info strong { display: block; font-size: 12.5px; font-family: var(--mono); overflow: hidden; text-overflow: ellipsis; }
+.api-endpoint-info small { color: var(--muted); font-size: 11px; display: block; }
+
+.method-badge {
+  display: inline-block; padding: 2px 7px; border-radius: 4px;
+  font-size: 10.5px; font-weight: 700; font-family: var(--mono); text-transform: uppercase;
+}
+.method-badge.get { background: rgba(59, 130, 246, 0.18); color: #3b82f6; border: 1px solid rgba(59, 130, 246, 0.3); }
+.method-badge.post { background: rgba(34, 197, 94, 0.18); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
+.method-badge.put { background: rgba(245, 158, 11, 0.18); color: #f59e0b; border: 1px solid rgba(245, 158, 11, 0.3); }
+.method-badge.delete { background: rgba(239, 68, 68, 0.18); color: #ef4444; border: 1px solid rgba(239, 68, 68, 0.3); }
+
+.api-body-editor {
+  width: 100%; padding: 10px 12px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: var(--radius-sm);
+  color: var(--text); font-size: 12.5px; line-height: 1.5; resize: vertical; outline: none;
+}
+.api-body-editor:focus { border-color: var(--link); }
+
+.api-response-meta { display: flex; align-items: center; gap: 8px; }
+.status-pill {
+  padding: 2px 8px; border-radius: 4px; font-size: 11px; font-family: var(--mono); font-weight: 700;
+  background: var(--surface-3); color: var(--muted);
+}
+.status-pill.ok { background: rgba(34, 197, 94, 0.15); color: var(--ok); }
+.status-pill.err { background: rgba(239, 68, 68, 0.15); color: var(--bad); }
+
+.latency-badge { font-size: 11px; font-family: var(--mono); color: var(--muted); }
+
+.api-response-viewer, .api-curl-viewer {
+  margin: 0; padding: 12px 14px; background: var(--bg); border: 1px solid var(--border);
+  border-radius: var(--radius-sm); font-size: 12px; max-height: 250px; overflow-y: auto; white-space: pre-wrap; word-break: break-all;
+}
+.api-response-viewer code { color: var(--ok); }
+.api-curl-viewer code { color: var(--accent); }
 
 /* ---------- Responsive: mobile app ---------- */
 @media (max-width: 1100px) {

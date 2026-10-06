@@ -1,10 +1,10 @@
 <!doctype html>
-<html lang="vi">
+<html lang="vi" data-theme="dark">
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>HomeMesh MVP</title>
-  <meta name="description" content="HomeMesh MVP - demo điều khiển đèn LED CCT 2700–6500K qua Gateway và BLE Mesh, mục tiêu độ trễ dưới 50 ms." />
+  <title>HomeMesh MVP — Smart Lighting &amp; BLE Mesh</title>
+  <meta name="description" content="HomeMesh MVP - demo điều khiển đèn LED CCT 2700–6500K qua Gateway và BLE Mesh, đo độ trễ và Jitter, sơ đồ mặt bằng nhà và REST API." />
   <meta name="theme-color" content="#0E1116" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
@@ -15,6 +15,7 @@
 </head>
 <body>
   <div class="app">
+    <!-- NAVIGATION BAR -->
     <nav class="nav" aria-label="Điều hướng chính">
       <div class="brand">
         <span class="brand-mark" aria-hidden="true"></span>
@@ -24,9 +25,12 @@
         </div>
       </div>
       <button class="nav-item is-active" data-view="home" type="button"><span aria-hidden="true">⌂</span><span>Trang chủ</span></button>
+      <button class="nav-item" data-view="floorplan" type="button"><span aria-hidden="true">🗺️</span><span>Sơ đồ nhà</span></button>
       <button class="nav-item" data-view="scenes" type="button"><span aria-hidden="true">✦</span><span>Cảnh</span></button>
       <button class="nav-item" data-view="mesh" type="button"><span aria-hidden="true">⬡</span><span>Mạng Mesh</span></button>
+      <button class="nav-item" data-view="api" type="button"><span aria-hidden="true">⚡</span><span>API Gateway</span></button>
       <button class="nav-item" data-view="log" type="button"><span aria-hidden="true">≡</span><span>Nhật ký</span></button>
+      
       <div class="nav-gateway" id="nav-gateway">
         <span class="dot"></span>
         <div>
@@ -37,12 +41,19 @@
     </nav>
 
     <main class="main">
+      <!-- TOP BAR -->
       <header class="topbar">
         <div>
           <p class="eyebrow" id="view-eyebrow">Nhà của tôi</p>
           <h1 id="view-title">Trang chủ</h1>
         </div>
         <div class="topbar-controls">
+          <!-- Nút chuyển đổi Giao diện Sáng / Tối -->
+          <button type="button" class="theme-toggle-btn" id="theme-toggle" aria-label="Đổi giao diện sáng/tối" title="Chuyển chế độ Sáng / Tối">
+            <span id="theme-icon">🌙</span> <span id="theme-text">Tối</span>
+          </button>
+
+          <!-- Bộ chọn đường truyền -->
           <div class="segmented" role="radiogroup" aria-label="Đường truyền lệnh" id="path-control">
             <button type="button" role="radio" data-path="local">LAN</button>
             <button type="button" role="radio" data-path="proxy">BLE</button>
@@ -54,14 +65,64 @@
         </div>
       </header>
 
-      <!-- TRANG CHỦ -->
+      <!-- 1. TRANG CHỦ -->
       <section class="view is-active" id="view-home" aria-labelledby="view-title">
         <div class="summary" id="summary"></div>
         <div class="chips" id="room-filter" role="tablist" aria-label="Lọc theo phòng"></div>
         <div id="rooms"></div>
       </section>
 
-      <!-- CẢNH -->
+      <!-- 2. SƠ ĐỒ MẶT BẰNG NHÀ (HOUSE FLOORPLAN) -->
+      <section class="view" id="view-floorplan">
+        <div class="floorplan-toolbar">
+          <div class="floorplan-options">
+            <label class="switch-row"><input type="checkbox" id="fp-glow" checked /><span class="switch" aria-hidden="true"></span>Quầng sáng CCT</label>
+            <label class="switch-row"><input type="checkbox" id="fp-links" checked /><span class="switch" aria-hidden="true"></span>Đường truyền Mesh</label>
+            <label class="switch-row"><input type="checkbox" id="fp-labels" checked /><span class="switch" aria-hidden="true"></span>Tên &amp; Công suất</label>
+          </div>
+          <div class="floorplan-actions">
+            <button class="btn" id="fp-all-on" type="button">Bật toàn nhà</button>
+            <button class="btn btn-ghost" id="fp-all-off" type="button">Tắt toàn nhà</button>
+            <button class="btn btn-primary" id="fp-add-light" type="button">+ Thêm đèn</button>
+          </div>
+        </div>
+
+        <div class="floorplan-grid">
+          <div class="card floorplan-card">
+            <div class="card-head">
+              <h2>Mặt bằng căn hộ &amp; Vị trí đèn</h2>
+              <div class="legend">
+                <span><i class="lg lg-gw"></i>Gateway</span>
+                <span><i class="lg lg-relay"></i>Đèn Relay</span>
+                <span><i class="lg lg-node"></i>Đèn thường</span>
+              </div>
+            </div>
+            <!-- SVG Bản vẽ nhà -->
+            <div class="floorplan-stage">
+              <svg id="floorplan-svg" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" role="img" aria-label="Sơ đồ mặt bằng nhà và vị trí đèn"></svg>
+            </div>
+            <p class="floorplan-hint muted small">💡 Click trực tiếp vào bóng đèn trên sơ đồ để bật/tắt hoặc click đúp để mở bảng chỉnh nhiệt độ màu chi tiết.</p>
+          </div>
+
+          <!-- Bảng phân tích mặt bằng -->
+          <div class="floorplan-sidebar">
+            <div class="card">
+              <div class="card-head">
+                <h2>Kết quả phân tích toàn nhà</h2>
+                <span class="tag" id="fp-total-status">Toàn nhà</span>
+              </div>
+              <div class="stats" id="floorplan-stats"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>Chiếu sáng theo phòng</h2></div>
+              <div class="floorplan-rooms-list" id="floorplan-rooms-summary"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. CẢNH -->
       <section class="view" id="view-scenes">
         <div class="panel-head">
           <p class="muted">Cảnh được lưu sẵn trong Scene Server của từng đèn. App chỉ gửi <b>1 gói Scene Recall</b> tới địa chỉ group → mọi đèn đổi cùng lúc.</p>
@@ -72,12 +133,12 @@
         <div class="scene-grid" id="scene-grid"></div>
       </section>
 
-      <!-- MẠNG MESH -->
+      <!-- 4. MẠNG MESH, ĐỘ TRỄ & JITTER -->
       <section class="view" id="view-mesh">
         <div class="mesh-layout">
           <div class="card topo-card">
             <div class="card-head">
-              <h2>Sơ đồ mạng</h2>
+              <h2>Sơ đồ mạng BLE Mesh</h2>
               <div class="legend">
                 <span><i class="lg lg-gw"></i>Gateway</span>
                 <span><i class="lg lg-relay"></i>Relay</span>
@@ -95,25 +156,33 @@
           <div class="mesh-side">
             <div class="card">
               <div class="card-head">
-                <h2>Độ trễ đầu-cuối</h2>
+                <h2>Độ trễ &amp; Jitter đầu-cuối</h2>
                 <span class="tag" id="target-tag">Mục tiêu &lt; 50 ms</span>
               </div>
               <div class="stats" id="latency-stats"></div>
-              <svg id="sparkline" class="sparkline" viewBox="0 0 300 90" preserveAspectRatio="none" aria-label="Biểu đồ độ trễ"></svg>
-              <div class="card-actions">
-                <button class="btn" id="btn-stress" type="button">Stress test 100 lệnh</button>
-                <button class="btn btn-ghost" id="btn-reset-stats" type="button">Xoá số liệu</button>
+              <svg id="sparkline" class="sparkline" viewBox="0 0 300 90" preserveAspectRatio="none" aria-label="Biểu đồ độ trễ và Jitter"></svg>
+              
+              <!-- Khối thao tác mô phỏng đo Jitter & Độ trễ -->
+              <div class="simulation-box">
+                <small class="muted">Mô phỏng thao tác thực tế &amp; Đo Jitter:</small>
+                <div class="card-actions">
+                  <button class="btn btn-primary" id="btn-sim-sweep" type="button">Quét tuần tự On/Off</button>
+                  <button class="btn" id="btn-sim-circadian" type="button">Nhịp sinh học (2700K ➔ 6500K)</button>
+                  <button class="btn" id="btn-stress" type="button">Thử tải 100 lệnh</button>
+                  <button class="btn btn-ghost" id="btn-reset-stats" type="button">Xoá số liệu</button>
+                </div>
               </div>
             </div>
+
             <div class="card">
-              <div class="card-head"><h2>Phân rã lệnh gần nhất</h2><span class="muted small" id="breakdown-target"></span></div>
+              <div class="card-head"><h2>Phân rã lệnh gần nhất (Đo Round-Trip Ack)</h2><span class="muted small" id="breakdown-target"></span></div>
               <div id="breakdown" class="breakdown"></div>
             </div>
           </div>
         </div>
 
         <div class="card">
-          <div class="card-head"><h2>Danh sách node</h2><span class="muted small" id="node-count"></span></div>
+          <div class="card-head"><h2>Danh sách node Mesh</h2><span class="muted small" id="node-count"></span></div>
           <div class="table-wrap">
             <table class="table" id="node-table">
               <thead><tr><th>Đèn</th><th>Unicast</th><th>Group</th><th>Hop</th><th>Relay</th><th>RSSI</th><th>Công suất</th><th>Trạng thái</th></tr></thead>
@@ -123,10 +192,76 @@
         </div>
       </section>
 
-      <!-- NHẬT KÝ -->
+      <!-- 5. API GATEWAY CONSOLE -->
+      <section class="view" id="view-api">
+        <div class="panel-head">
+          <p class="muted">
+            Mô phỏng <b>REST API &amp; WebSocket Gateway</b> cho hệ thống chiếu sáng thông minh BLE Mesh.
+            Các API này cho phép tích hợp với Home Assistant, ứng dụng di động hoặc Web Dashboard.
+          </p>
+          <div class="row-gap">
+            <button class="btn btn-primary" id="btn-run-api" type="button">▶ Gửi Request</button>
+            <button class="btn btn-ghost" id="btn-copy-curl" type="button">Sao chép cURL</button>
+          </div>
+        </div>
+
+        <div class="api-layout">
+          <!-- Cột trái: Endpoint Catalog & Request Editor -->
+          <div class="api-left">
+            <div class="card">
+              <div class="card-head"><h2>Danh mục API Endpoints</h2><span class="tag">REST v1</span></div>
+              <div class="api-catalog-list" id="api-catalog-list"></div>
+            </div>
+
+            <div class="card">
+              <div class="card-head">
+                <h2>Request Body (JSON)</h2>
+                <span class="small muted mono" id="api-req-method-path">GET /api/v1/lights</span>
+              </div>
+              <textarea class="api-body-editor mono" id="api-request-body" rows="6" placeholder="Không yêu cầu Request Body cho GET"></textarea>
+              <div class="card-actions">
+                <button class="btn btn-primary" id="btn-run-api-bottom" type="button">▶ Gửi lệnh API</button>
+                <button class="btn btn-ghost" id="btn-reset-api-body" type="button">Khôi phục Body mẫu</button>
+              </div>
+            </div>
+          </div>
+
+          <!-- Cột phải: Response & cURL -->
+          <div class="api-right">
+            <div class="card">
+              <div class="card-head">
+                <h2>Kết quả phản hồi (Response)</h2>
+                <div class="api-response-meta">
+                  <span class="status-pill ok" id="api-res-status">200 OK</span>
+                  <span class="latency-badge" id="api-res-time">— ms</span>
+                </div>
+              </div>
+              <pre class="api-response-viewer mono"><code id="api-response-code">// Chọn endpoint và bấm 'Gửi Request' để xem kết quả...</code></pre>
+            </div>
+
+            <div class="card">
+              <div class="card-head"><h2>Lệnh cURL tương ứng</h2></div>
+              <pre class="api-curl-viewer mono"><code id="api-curl-code">curl -X GET http://192.168.1.100:8080/api/v1/lights</code></pre>
+            </div>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>Lịch sử gọi API (Live Calls)</h2><button class="btn btn-ghost" id="btn-clear-api-log" type="button">Xoá</button></div>
+          <div class="table-wrap">
+            <table class="table mono" id="api-log-table">
+              <thead><tr><th>Thời gian</th><th>Method</th><th>Endpoint</th><th>Status</th><th>Thời gian xử lý</th><th>Thông điệp</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <p class="empty" id="api-log-empty">Chưa có lệnh gọi API nào.</p>
+          </div>
+        </div>
+      </section>
+
+      <!-- 6. NHẬT KÝ GÓI TIN -->
       <section class="view" id="view-log">
         <div class="panel-head">
-          <p class="muted">Mỗi thao tác trên UI → 1 Access Message BLE Mesh. Kéo thanh trượt gửi <b>Unack</b> (giới hạn 1 gói / 60 ms), thả tay gửi <b>Ack</b> để chốt trạng thái.</p>
+          <p class="muted">Mỗi thao tác trên UI hoặc qua API → 1 Access Message BLE Mesh. Kéo thanh trượt gửi <b>Unack</b> (giới hạn 1 gói / 60 ms), thả tay gửi <b>Ack</b> để chốt trạng thái.</p>
           <div class="row-gap">
             <button class="btn" id="btn-export" type="button">Xuất JSON</button>
             <button class="btn btn-ghost" id="btn-clear-log" type="button">Xoá</button>
@@ -145,7 +280,7 @@
     </main>
   </div>
 
-  <!-- CHI TIẾT ĐÈN -->
+  <!-- MODAL: CHI TIẾT ĐÈN -->
   <dialog class="sheet" id="device-sheet" aria-labelledby="sheet-title">
     <form method="dialog" class="sheet-close-form"><button class="icon-btn" aria-label="Đóng">✕</button></form>
     <div class="sheet-body">
@@ -189,7 +324,7 @@
     </div>
   </dialog>
 
-  <!-- PROVISIONING -->
+  <!-- MODAL: PROVISIONING -->
   <dialog class="sheet" id="provision-dialog" aria-labelledby="prov-title">
     <form method="dialog" class="sheet-close-form"><button class="icon-btn" aria-label="Đóng">✕</button></form>
     <div class="sheet-body">

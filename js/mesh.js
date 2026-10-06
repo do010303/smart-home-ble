@@ -115,7 +115,8 @@ export function createTidCounter(start = 0) {
 const pick = ([min, max], rng) => min + (max - min) * rng();
 
 // Độ trễ từ lúc người dùng thao tác đến lúc đèn ở cách gateway `hops` hop đổi trạng thái.
-export function simulateLatency({ hops, path = 'local', segments = 1 }, rng = Math.random) {
+// Nếu ack = true: đo toàn bộ thời gian phản hồi (Round-Trip Response Time = lệnh đi + phản hồi trạng thái).
+export function simulateLatency({ hops, path = 'local', segments = 1, ack = false }, rng = Math.random) {
   const p = LATENCY_PROFILE;
   const breakdown = [];
 
@@ -124,16 +125,26 @@ export function simulateLatency({ hops, path = 'local', segments = 1 }, rng = Ma
   if (path === 'proxy') breakdown.push({ label: 'App → Proxy node (GATT)', ms: pick(p.gattProxyConnInterval, rng) });
 
   breakdown.push({ label: 'Gateway / Proxy xử lý + mã hoá', ms: pick(p.gatewayProcessing, rng) });
-  breakdown.push({ label: 'Phát quảng bá (advertising)', ms: pick(p.advertisingTx, rng) * segments });
+  breakdown.push({ label: 'Phát quảng bá lệnh (Tx advertising)', ms: pick(p.advertisingTx, rng) * segments });
 
   for (let i = 1; i < hops; i += 1) {
-    breakdown.push({ label: `Relay hop ${i}`, ms: pick(p.relayHop, rng) * segments });
+    breakdown.push({ label: `Relay hop ${i} (Tx)`, ms: pick(p.relayHop, rng) * segments });
   }
 
   breakdown.push({ label: 'Node giải mã + cập nhật PWM', ms: pick(p.nodeProcessing, rng) });
 
+  // Nếu là lệnh có phản hồi (Ack): tính thêm chặng Status phản hồi ngược về gateway / app
+  if (ack) {
+    breakdown.push({ label: 'Node phát phản hồi Status (Rx)', ms: pick(p.advertisingTx, rng) });
+    for (let i = 1; i < hops; i += 1) {
+      breakdown.push({ label: `Relay hop ${i} (Rx ack)`, ms: pick(p.relayHop, rng) });
+    }
+    if (path === 'local') breakdown.push({ label: 'Gateway → App (Status WS)', ms: pick(p.lanWebSocket, rng) * 0.8 });
+    if (path === 'cloud') breakdown.push({ label: 'Gateway → Cloud → App', ms: pick(p.cloudRoundTrip, rng) * 0.9 });
+  }
+
   const total = breakdown.reduce((sum, part) => sum + part.ms, 0);
-  return { total: Math.round(total * 10) / 10, breakdown };
+  return { total: Math.round(total * 10) / 10, breakdown, isAck: ack };
 }
 
 // Lệnh group: 1 gói tới địa chỉ group, mọi đèn nhận gần như cùng lúc. Độ trễ = đèn chậm nhất.
@@ -144,18 +155,57 @@ export function simulateGroupLatency(nodes, options, rng = Math.random) {
   return { total: slowest.total, perNode, slowest };
 }
 
+// Thống kê độ trễ và Jitter (độ biến thiên trễ gói tin liên tiếp).
 export function latencyStats(samples, target = MESH_LIMITS.targetLatencyMs) {
-  if (samples.length === 0) return { count: 0, avg: 0, p95: 0, max: 0, withinTarget: 0 };
+  if (samples.length === 0) {
+    return {
+      count: 0, avg: 0, p95: 0, max: 0, min: 0, withinTarget: 0,
+      jitterAvg: 0, jitterP95: 0, jitterMax: 0, jitterCurrent: 0, stdDev: 0
+    };
+  }
   const sorted = [...samples].sort((a, b) => a - b);
   const avg = sorted.reduce((s, v) => s + v, 0) / sorted.length;
   const p95 = sorted[Math.min(sorted.length - 1, Math.ceil(sorted.length * 0.95) - 1)];
   const within = sorted.filter((v) => v < target).length;
+  const min = sorted[0];
+
+  // Tính Jitter RFC 3550 (chênh lệch trễ giữa các gói liên tiếp)
+  let jitterSum = 0;
+  let jitterMax = 0;
+  let jitterCurrent = 0;
+  const jitters = [];
+
+  for (let i = 1; i < samples.length; i += 1) {
+    const diff = Math.abs(samples[i] - samples[i - 1]);
+    jitters.push(diff);
+    jitterSum += diff;
+    if (diff > jitterMax) jitterMax = diff;
+  }
+  if (samples.length >= 2) {
+    jitterCurrent = Math.abs(samples[samples.length - 1] - samples[samples.length - 2]);
+  }
+  const sortedJitters = [...jitters].sort((a, b) => a - b);
+  const jitterAvg = jitters.length ? jitterSum / jitters.length : 0;
+  const jitterP95 = sortedJitters.length
+    ? sortedJitters[Math.min(sortedJitters.length - 1, Math.ceil(sortedJitters.length * 0.95) - 1)]
+    : 0;
+
+  // Độ lệch chuẩn
+  const variance = samples.reduce((s, v) => s + Math.pow(v - avg, 2), 0) / samples.length;
+  const stdDev = Math.sqrt(variance);
+
   return {
     count: sorted.length,
     avg: Math.round(avg * 10) / 10,
     p95: Math.round(p95 * 10) / 10,
     max: Math.round(sorted[sorted.length - 1] * 10) / 10,
-    withinTarget: Math.round((within / sorted.length) * 1000) / 10
+    min: Math.round(min * 10) / 10,
+    withinTarget: Math.round((within / sorted.length) * 1000) / 10,
+    jitterAvg: Math.round(jitterAvg * 10) / 10,
+    jitterP95: Math.round(jitterP95 * 10) / 10,
+    jitterMax: Math.round(jitterMax * 10) / 10,
+    jitterCurrent: Math.round(jitterCurrent * 10) / 10,
+    stdDev: Math.round(stdDev * 10) / 10
   };
 }
 
