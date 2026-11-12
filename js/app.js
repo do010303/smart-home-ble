@@ -835,11 +835,13 @@ function bindFloorplan() {
   $('#fp-glow').addEventListener('change', (e) => {
     state.fpOptions.glow = e.target.checked;
     $$('#floorplan-svg .fp-glow').forEach((el) => { el.style.display = state.fpOptions.glow ? '' : 'none'; });
+    fp3d.api?.sync(); // bản 3D: ẩn/hiện nón sáng
   });
 
   $('#fp-links').addEventListener('change', (e) => {
     state.fpOptions.links = e.target.checked;
     $$('#floorplan-svg .fp-mesh-link').forEach((el) => { el.style.display = state.fpOptions.links ? '' : 'none'; });
+    fp3d.api?.sync(); // bản 3D: ẩn/hiện đường mesh
   });
 
   $('#fp-labels').addEventListener('change', (e) => {

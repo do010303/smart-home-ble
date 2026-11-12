@@ -236,7 +236,7 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
   const coneGeo = new THREE.ConeGeometry(1.25, CEIL - 0.05, 32, 1, true);
   const fixtureGeo = new THREE.CylinderGeometry(0.17, 0.2, 0.05, 24);
   const hitGeo = new THREE.SphereGeometry(0.42, 8, 8);
-  const linkMat = new THREE.LineDashedMaterial({ color: '#f59e0b', dashSize: 0.12, gapSize: 0.1, transparent: true, opacity: 0.55 });
+  const linkMat = new THREE.LineDashedMaterial({ color: '#ff9f1a', dashSize: 0.16, gapSize: 0.08, transparent: true, opacity: 0.95 });
   const linkFlashMat = new THREE.LineBasicMaterial({ color: '#fbbf24' });
 
   function removeLightObj(id) {
