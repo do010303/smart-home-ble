@@ -3,13 +3,20 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <title>HomeMesh MVP — Smart Lighting &amp; BLE Mesh</title>
+  <title>HomeMesh — Smart Lighting &amp; BLE Mesh</title>
   <meta name="description" content="HomeMesh MVP - demo điều khiển đèn LED CCT 2700–6500K qua Gateway và BLE Mesh, đo độ trễ và Jitter, sơ đồ mặt bằng nhà và REST API." />
   <meta name="theme-color" content="#0E1116" />
+  <meta property="og:title" content="HomeMesh — Điều khiển đèn LED qua BLE Mesh" />
+  <meta property="og:description" content="Web app demo: đèn LED 12–18 W, nhiệt độ màu 2700–6500 K, gateway + BLE Mesh, độ trễ dưới 50 ms." />
+  <meta property="og:image" content="assets/preview.png" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-title" content="HomeMesh" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/icon-192.png" />
   <link rel="preconnect" href="https://fonts.googleapis.com" />
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
-  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 32 32%22%3E%3Ccircle cx=%2216%22 cy=%2216%22 r=%2214%22 fill=%22%23FFB547%22/%3E%3C/svg%3E" />
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="css/style.css" />
   <script type="module" src="js/app.js"></script>
 </head>
@@ -25,16 +32,21 @@
         </div>
       </div>
       <button class="nav-item is-active" data-view="home" type="button"><span aria-hidden="true">⌂</span><span>Trang chủ</span></button>
-      <button class="nav-item" data-view="floorplan" type="button"><span aria-hidden="true">🗺️</span><span>Sơ đồ nhà</span></button>
+      <button class="nav-item" data-view="floorplan" type="button"><span aria-hidden="true">▦</span><span>Sơ đồ nhà</span></button>
+      <button class="nav-item" data-view="devices" type="button"><span aria-hidden="true">◎</span><span>Thiết bị</span></button>
       <button class="nav-item" data-view="scenes" type="button"><span aria-hidden="true">✦</span><span>Cảnh</span></button>
-      <button class="nav-item" data-view="mesh" type="button"><span aria-hidden="true">⬡</span><span>Mạng Mesh</span></button>
-      <button class="nav-item" data-view="api" type="button"><span aria-hidden="true">⚡</span><span>API Gateway</span></button>
-      <button class="nav-item" data-view="log" type="button"><span aria-hidden="true">≡</span><span>Nhật ký</span></button>
-      
+      <p class="nav-group">Kỹ thuật</p>
+      <button class="nav-item nav-secondary" data-view="test" type="button"><span aria-hidden="true">▷</span><span>Điều khiển thử</span></button>
+      <button class="nav-item nav-secondary" data-view="mesh" type="button"><span aria-hidden="true">⬡</span><span>Mạng Mesh</span></button>
+      <button class="nav-item nav-secondary" data-view="api" type="button"><span aria-hidden="true">{}</span><span>API Gateway</span></button>
+      <button class="nav-item nav-secondary" data-view="log" type="button"><span aria-hidden="true">≡</span><span>Nhật ký</span></button>
+      <button class="nav-item nav-secondary" data-view="settings" type="button"><span aria-hidden="true">⚙</span><span>Cài đặt</span></button>
+      <button class="nav-item nav-more" id="nav-more" type="button" aria-haspopup="dialog"><span aria-hidden="true">⋯</span><span>Thêm</span></button>
+
       <div class="nav-gateway" id="nav-gateway">
         <span class="dot"></span>
         <div>
-          <strong>Gateway GW-01</strong>
+          <strong id="nav-gateway-name">Gateway GW-01</strong>
           <small id="nav-gateway-text">Online · 0x0001</small>
         </div>
       </div>
@@ -122,6 +134,64 @@
         </div>
       </section>
 
+
+      <!-- THIẾT BỊ: QUÉT & QUẢN LÝ -->
+      <section class="view" id="view-devices">
+        <div class="devices-layout">
+          <div class="card scan-card">
+            <div class="card-head">
+              <h2>Quét thiết bị mới</h2>
+              <span class="tag" id="scan-status">Sẵn sàng</span>
+            </div>
+            <div class="scan-stage">
+              <div class="radar" id="radar" aria-hidden="true">
+                <span class="radar-ring r1"></span><span class="radar-ring r2"></span><span class="radar-ring r3"></span>
+                <span class="radar-sweep"></span>
+                <span class="radar-center">GW</span>
+              </div>
+              <div class="scan-info">
+                <p class="muted">Gateway lắng nghe <b>Unprovisioned Device Beacon</b> của đèn chưa vào mạng (dịch vụ BLE <span class="mono">0x1827</span>) trong 6 giây. Đèn mới cần được cấp điện và ở chế độ chờ ghép nối.</p>
+                <div class="progress" aria-hidden="true"><i id="scan-progress"></i></div>
+                <div class="card-actions">
+                  <button class="btn btn-primary" id="btn-scan" type="button">Bắt đầu quét</button>
+                  <button class="btn btn-ghost" id="btn-scan-stop" type="button" hidden>Dừng</button>
+                </div>
+              </div>
+            </div>
+            <ul class="found-list" id="found-list" aria-live="polite"></ul>
+            <p class="empty small" id="found-empty">Bấm “Bắt đầu quét” để tìm đèn chưa vào mạng.</p>
+          </div>
+
+          <div class="card">
+            <div class="card-head">
+              <h2>Bluetooth thật</h2>
+              <span class="tag">Thử nghiệm · Web Bluetooth</span>
+            </div>
+            <p class="muted small">Dùng Bluetooth của chính máy bạn để tìm thiết bị BLE Mesh ở gần (dịch vụ <span class="mono">0x1827</span> / <span class="mono">0x1828</span>). Bản MVP chỉ đọc tên và ID, chưa ghép nối.</p>
+            <p class="small" id="webble-support"></p>
+            <div class="card-actions">
+              <button class="btn" id="btn-webble" type="button">Tìm thiết bị gần đây</button>
+              <label class="switch-row"><input type="checkbox" id="webble-all" /><span class="switch" aria-hidden="true"></span>Hiện mọi thiết bị BLE</label>
+            </div>
+            <ul class="found-list" id="webble-list"></ul>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head">
+            <h2>Thiết bị trong mạng</h2>
+            <span class="muted small" id="device-count"></span>
+          </div>
+          <div class="table-wrap">
+            <table class="table" id="device-table">
+              <thead><tr><th>Đèn</th><th>Phòng</th><th>Unicast</th><th>Firmware</th><th>Tín hiệu</th><th>Hop</th><th class="right">Thao tác</th></tr></thead>
+              <tbody></tbody>
+            </table>
+            <p class="empty" id="device-empty" hidden>Mạng chưa có đèn nào. Hãy quét và thêm đèn.</p>
+          </div>
+        </div>
+      </section>
+
       <!-- 3. CẢNH -->
       <section class="view" id="view-scenes">
         <div class="panel-head">
@@ -131,6 +201,95 @@
           </label>
         </div>
         <div class="scene-grid" id="scene-grid"></div>
+      </section>
+
+      <!-- ĐIỀU KHIỂN THỬ -->
+      <section class="view" id="view-test">
+        <div class="test-layout">
+          <div class="card test-form">
+            <div class="card-head"><h2>Soạn lệnh</h2><span class="tag" id="t-path-tag">LAN</span></div>
+            <label class="field">Đích
+              <select id="t-target"></select>
+            </label>
+            <label class="field">Lệnh
+              <select id="t-command"></select>
+            </label>
+
+            <div class="field" data-param="on">
+              <span>Trạng thái</span>
+              <div class="segmented" role="radiogroup" aria-label="Bật hoặc tắt" id="t-on">
+                <button type="button" role="radio" data-on="1" aria-checked="true">Bật</button>
+                <button type="button" role="radio" data-on="0" aria-checked="false">Tắt</button>
+              </div>
+            </div>
+            <div class="field" data-param="lightness">
+              <div class="control-label"><span>Độ sáng</span><output id="t-lightness-out">80%</output></div>
+              <input type="range" class="range range-light" id="t-lightness" min="1" max="100" value="80" aria-label="Độ sáng" />
+            </div>
+            <div class="field" data-param="kelvin">
+              <div class="control-label"><span>Nhiệt độ màu</span><output id="t-kelvin-out">4000K</output></div>
+              <input type="range" class="range range-cct" id="t-kelvin" min="2700" max="6500" step="50" value="4000" aria-label="Nhiệt độ màu" />
+            </div>
+            <label class="field" data-param="scene">Cảnh
+              <select id="t-scene"></select>
+            </label>
+            <label class="field" data-param="seconds">Thời gian nháy (giây)
+              <input type="number" id="t-seconds" min="1" max="30" value="5" />
+            </label>
+
+            <div class="field-row">
+              <label class="field">Số lần lặp
+                <input type="number" id="t-count" min="1" max="200" value="10" />
+              </label>
+              <label class="field">Giãn cách (ms)
+                <input type="number" id="t-interval" min="0" max="2000" step="10" value="100" />
+              </label>
+            </div>
+            <label class="switch-row" id="t-ack-row"><input type="checkbox" id="t-ack" checked /><span class="switch" aria-hidden="true"></span>Chờ phản hồi Status (Ack) — đo thêm độ trễ khứ hồi</label>
+
+            <div class="packet">
+              <div class="control-label"><span>Gói tin sẽ gửi</span><output id="t-packet-meta"></output></div>
+              <code id="t-packet">—</code>
+            </div>
+
+            <div class="card-actions">
+              <button class="btn btn-primary" id="t-run" type="button">▶ Chạy thử</button>
+              <button class="btn" id="t-stop" type="button" disabled>■ Dừng</button>
+              <button class="btn btn-ghost" id="t-clear" type="button">Xoá kết quả</button>
+            </div>
+            <div class="progress" aria-hidden="true"><i id="t-progress"></i></div>
+            <p class="small muted" id="t-progress-text" aria-live="polite"></p>
+
+            <div class="quick-tests">
+              <small class="muted">Bài thử nhanh</small>
+              <div class="chips">
+                <button type="button" class="chip" data-quick="toggle">Bật/tắt 1 đèn 20 lần</button>
+                <button type="button" class="chip" data-quick="sweep">Quét màu toàn nhà</button>
+                <button type="button" class="chip" data-quick="room">Đổi màu cả phòng</button>
+                <button type="button" class="chip" data-quick="get">Đọc trạng thái 30 lần</button>
+              </div>
+            </div>
+          </div>
+
+          <div class="test-results">
+            <div class="card">
+              <div class="card-head"><h2>Kết quả</h2><span class="tag" id="t-verdict">Chưa chạy</span></div>
+              <div class="stats" id="t-stats"></div>
+              <svg id="t-chart" class="sparkline tall" viewBox="0 0 300 120" preserveAspectRatio="none" role="img" aria-label="Biểu đồ độ trễ từng lệnh"></svg>
+              <p class="chart-legend small muted"><span><i class="lg-line one"></i>Một chiều (lệnh tới đèn)</span><span><i class="lg-line rtt"></i>Khứ hồi (có Status)</span><span><i class="lg-line thr"></i>Mục tiêu</span></p>
+            </div>
+            <div class="card">
+              <div class="card-head"><h2>Từng lệnh</h2><span class="muted small" id="t-count-text"></span></div>
+              <div class="table-wrap">
+                <table class="table mono" id="t-table">
+                  <thead><tr><th>#</th><th>Đích</th><th>Opcode</th><th>Payload</th><th>Một chiều</th><th>Khứ hồi</th></tr></thead>
+                  <tbody></tbody>
+                </table>
+                <p class="empty" id="t-empty">Chưa chạy lệnh nào.</p>
+              </div>
+            </div>
+          </div>
+        </div>
       </section>
 
       <!-- 4. MẠNG MESH, ĐỘ TRỄ & JITTER -->
@@ -277,6 +436,87 @@
           </div>
         </div>
       </section>
+
+      <!-- CÀI ĐẶT -->
+      <section class="view" id="view-settings">
+        <form class="settings-grid" id="settings-form" autocomplete="off" onsubmit="return false">
+          <div class="card">
+            <div class="card-head"><h2>Giao diện</h2></div>
+            <div class="field">
+              <span>Chủ đề</span>
+              <div class="segmented" role="radiogroup" aria-label="Chủ đề giao diện" id="set-theme">
+                <button type="button" role="radio" data-theme-choice="system">Theo hệ thống</button>
+                <button type="button" role="radio" data-theme-choice="dark">Tối</button>
+                <button type="button" role="radio" data-theme-choice="light">Sáng</button>
+              </div>
+            </div>
+            <label class="switch-row"><input type="checkbox" data-setting="animations" /><span class="switch" aria-hidden="true"></span>Hiệu ứng chuyển động</label>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Gateway</h2></div>
+            <label class="field">Tên gateway <input type="text" data-setting="gatewayName" maxlength="32" /></label>
+            <div class="field-row">
+              <label class="field">Địa chỉ IP / host <input type="text" data-setting="gatewayHost" inputmode="url" /></label>
+              <label class="field">Cổng <input type="number" data-setting="gatewayPort" min="1" max="65535" /></label>
+            </div>
+            <label class="field">Đường truyền mặc định
+              <select data-setting="defaultPath">
+                <option value="local">LAN → Gateway</option>
+                <option value="proxy">BLE GATT Proxy</option>
+                <option value="cloud">Cloud MQTT</option>
+              </select>
+            </label>
+            <p class="small muted">Địa chỉ gateway dùng trong lệnh cURL ở màn hình API và khi nối gateway thật.</p>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Mạng BLE Mesh</h2></div>
+            <div class="field-row">
+              <label class="field">TTL mặc định <input type="number" data-setting="ttl" min="2" max="7" /></label>
+              <label class="field">Mục tiêu độ trễ (ms) <input type="number" data-setting="targetLatencyMs" min="10" max="500" /></label>
+            </div>
+            <div class="field-row">
+              <label class="field">Nhịp gửi khi kéo slider (ms) <input type="number" data-setting="throttleMs" min="20" max="500" step="10" /></label>
+              <label class="field">Thời gian nháy nhận diện (s) <input type="number" data-setting="attentionSeconds" min="1" max="30" /></label>
+            </div>
+            <label class="field">Môi trường mô phỏng
+              <select data-setting="loadProfile">
+                <option value="ideal">Lý tưởng (phòng thí nghiệm)</option>
+                <option value="normal">Bình thường (nhà ở)</option>
+                <option value="busy">Nhiễu cao (nhiều Wi-Fi/BLE)</option>
+              </select>
+            </label>
+            <p class="small muted" id="ttl-hint"></p>
+          </div>
+
+          <div class="card">
+            <div class="card-head"><h2>Dữ liệu</h2></div>
+            <p class="small muted">Trạng thái đèn và cài đặt được lưu trong trình duyệt này. Sao lưu ra file để chuyển sang máy khác.</p>
+            <div class="card-actions">
+              <button class="btn" id="btn-backup" type="button">Sao lưu ra file</button>
+              <label class="btn" for="import-file">Khôi phục từ file</label>
+              <input type="file" id="import-file" accept="application/json,.json" hidden />
+            </div>
+            <div class="card-actions">
+              <button class="btn btn-ghost" id="btn-clear-metrics" type="button">Xoá số liệu đo</button>
+              <button class="btn btn-danger" id="btn-factory" type="button">Khôi phục mặc định</button>
+            </div>
+          </div>
+
+          <div class="card about-card">
+            <div class="card-head"><h2>Ứng dụng</h2><span class="tag" id="app-version"></span></div>
+            <p class="small muted">HomeMesh là bản demo MVP: tầng BLE Mesh được <b>mô phỏng</b> trên trình duyệt, không cần phần cứng. Gói tin được mã hoá đúng đặc tả SIG Mesh Model; độ trễ lấy từ mô hình giả định.</p>
+            <div class="card-actions">
+              <button class="btn btn-primary" id="btn-install" type="button" hidden>Cài làm ứng dụng</button>
+              <button class="btn" id="btn-share" type="button">Sao chép link chia sẻ</button>
+              <button class="btn btn-ghost" id="btn-show-welcome" type="button">Xem hướng dẫn</button>
+            </div>
+            <p class="small muted" id="install-hint"></p>
+            <p class="small"><a href="https://github.com/do010303/smart-home-ble" target="_blank" rel="noopener">Mã nguồn trên GitHub</a></p>
+          </div>
+        </form>
+      </section>
     </main>
   </div>
 
@@ -321,6 +561,9 @@
         <div class="control-label"><span>Gói tin gần nhất</span><output id="sheet-latency"></output></div>
         <code id="sheet-packet">—</code>
       </div>
+      <div class="card-actions">
+        <button class="btn" id="sheet-identify" type="button">Nháy nhận diện</button>
+      </div>
     </div>
   </dialog>
 
@@ -335,10 +578,74 @@
         <ul class="candidate-list" id="prov-candidates"></ul>
       </div>
       <div id="prov-run" hidden>
-        <label class="select-wrap">Gán vào phòng <select id="prov-room"></select></label>
+        <p class="small muted" id="prov-meta"></p>
+        <div class="field-row">
+          <label class="field">Tên đèn <input type="text" id="prov-name" maxlength="40" /></label>
+          <label class="field">Phòng <select id="prov-room"></select></label>
+        </div>
         <ol class="steps" id="prov-steps"></ol>
         <button class="btn btn-primary full" id="prov-start" type="button">Bắt đầu provisioning</button>
       </div>
+    </div>
+  </dialog>
+
+
+  <!-- MODAL: SỬA THIẾT BỊ -->
+  <dialog class="sheet" id="device-edit" aria-labelledby="edit-title">
+    <form method="dialog" class="sheet-close-form"><button class="icon-btn" aria-label="Đóng">✕</button></form>
+    <form class="sheet-body" id="device-edit-form">
+      <p class="eyebrow" id="edit-meta"></p>
+      <h2 id="edit-title">Sửa thiết bị</h2>
+      <label class="field">Tên đèn <input type="text" id="edit-name" maxlength="40" required /></label>
+      <label class="field">Phòng <select id="edit-room"></select></label>
+      <p class="small muted">Đổi phòng sẽ gửi <span class="mono">Config Model Subscription Overwrite</span> để đèn chuyển sang group của phòng mới.</p>
+      <div class="card-actions">
+        <button class="btn btn-primary" type="submit">Lưu</button>
+        <button class="btn btn-ghost" type="button" id="edit-cancel">Huỷ</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- MODAL: XÁC NHẬN -->
+  <dialog class="sheet small-sheet" id="confirm-dialog" aria-labelledby="confirm-title">
+    <div class="sheet-body">
+      <h2 id="confirm-title"></h2>
+      <p class="muted" id="confirm-message"></p>
+      <div class="card-actions">
+        <button class="btn btn-danger" type="button" id="confirm-ok">Xác nhận</button>
+        <button class="btn btn-ghost" type="button" id="confirm-cancel">Huỷ</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: MENU THÊM (MOBILE) -->
+  <dialog class="sheet" id="more-sheet" aria-label="Các màn hình khác">
+    <form method="dialog" class="sheet-close-form"><button class="icon-btn" aria-label="Đóng">✕</button></form>
+    <div class="sheet-body">
+      <p class="eyebrow">Kỹ thuật</p>
+      <div class="more-grid">
+        <button type="button" class="more-item" data-view="test"><span aria-hidden="true">▷</span>Điều khiển thử</button>
+        <button type="button" class="more-item" data-view="mesh"><span aria-hidden="true">⬡</span>Mạng Mesh</button>
+        <button type="button" class="more-item" data-view="api"><span aria-hidden="true">{}</span>API Gateway</button>
+        <button type="button" class="more-item" data-view="log"><span aria-hidden="true">≡</span>Nhật ký</button>
+        <button type="button" class="more-item" data-view="settings"><span aria-hidden="true">⚙</span>Cài đặt</button>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- MODAL: HƯỚNG DẪN LẦN ĐẦU -->
+  <dialog class="sheet" id="welcome-dialog" aria-labelledby="welcome-title">
+    <div class="sheet-body welcome">
+      <span class="brand-mark big" aria-hidden="true"></span>
+      <h2 id="welcome-title">Chào mừng đến HomeMesh</h2>
+      <p class="muted">Web app điều khiển đèn LED 12–18 W, nhiệt độ màu 2700–6500 K qua gateway và BLE Mesh. Đây là bản <b>mô phỏng</b>: mọi thứ chạy trong trình duyệt, không cần phần cứng.</p>
+      <ol class="welcome-steps">
+        <li><b>Trang chủ</b> — bấm một đèn, kéo thanh màu để thấy đèn đổi màu.</li>
+        <li><b>Thiết bị</b> — quét tìm đèn mới và thêm vào phòng.</li>
+        <li><b>Điều khiển thử</b> — gửi lệnh lặp lại và đo độ trễ có đạt dưới 50 ms không.</li>
+      </ol>
+      <p class="small muted">Trên điện thoại: mở menu trình duyệt → <b>Thêm vào Màn hình chính</b> để dùng như app.</p>
+      <button class="btn btn-primary full" type="button" id="welcome-ok">Bắt đầu</button>
     </div>
   </dialog>
 

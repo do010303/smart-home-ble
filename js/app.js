@@ -5,30 +5,39 @@ import {
   kelvinLabel, kelvinToHex, percentToLightnessActual
 } from './cct.js';
 import {
-  ADDRESS, MESH_LIMITS, PATHS, PROVISIONING_STEPS, computeHops, createTidCounter,
-  encodeLightCtlSet, encodeOnOffGet, encodeOnOffSet, encodeSceneRecall, formatAddress,
+  ADDRESS, LOAD_PROFILES, PATHS, PROVISIONING_STEPS, computeHops, createTidCounter,
+  encodeAttentionSet, encodeLightCtlSet, encodeNodeReset, encodeOnOffGet, encodeOnOffSet,
+  encodeSceneRecall, encodeSubscriptionOverwrite, formatAddress,
   latencyStats, opcodeName, segmentsNeeded, simulateGroupLatency, toHex
 } from './mesh.js';
 import {
-  DEFAULT_LIGHTS, DEFAULT_LIGHT_STATE, NEW_DEVICE_CANDIDATES, ROOMS, SCENES,
+  DEFAULT_FIRMWARE, DEFAULT_LIGHTS, DEFAULT_LIGHT_STATE, NEW_DEVICE_CANDIDATES, ROOMS, SCENES,
   GATEWAY_FLOORPLAN_POS
 } from './data.js';
 import {
-  API_CATALOG, apiCallHistory, executeApiRequest, registerGlobalApi
+  API_CATALOG, apiCallHistory, buildCurl, executeApiRequest, registerGlobalApi
 } from './api.js';
+import { SETTINGS_KEY, gatewayBaseUrl, resolveTheme, sanitizeSettings } from './settings.js';
+import { mountDevices } from './ui/devices.js';
+import { mountTestbench } from './ui/testbench.js';
+import { mountSettings } from './ui/settings.js';
 
 const STORAGE_KEY = 'homemesh-mvp-v1';
 const THEME_KEY = 'homemesh_theme';
-const SLIDER_THROTTLE_MS = 60;
+const WELCOME_KEY = 'homemesh-welcome-seen';
 const GATEWAY_POS = { x: 50, y: 46 };
 const VIEW_TITLES = {
   home: ['Nhà của tôi', 'Trang chủ'],
   floorplan: ['Mặt bằng căn hộ', 'Sơ đồ nhà & Đèn'],
+  devices: ['Quét & quản lý', 'Thiết bị'],
   scenes: ['Ngữ cảnh ánh sáng', 'Cảnh'],
+  test: ['Gửi lệnh & đo độ trễ', 'Điều khiển thử'],
   mesh: ['Gateway + BLE Mesh', 'Mạng Mesh & Jitter'],
   api: ['REST & WebSocket Gateway', 'API Console'],
-  log: ['Access message', 'Nhật ký gói tin']
+  log: ['Access message', 'Nhật ký gói tin'],
+  settings: ['Tuỳ chỉnh ứng dụng', 'Cài đặt']
 };
+const views = {};
 
 const nextTid = createTidCounter();
 const roomById = new Map(ROOMS.map((r) => [r.id, r]));
@@ -39,8 +48,10 @@ const state = {
   path: 'local',
   gatewayOnline: true,
   theme: 'dark',
+  settings: sanitizeSettings(null),
   lights: [],
-  samples: [],
+  samples: [],      // độ trễ một chiều (lệnh → đèn), so với mục tiêu
+  rttSamples: [],   // độ trễ khứ hồi của lệnh có Ack
   log: [],
   lastResult: null,
   openLightId: null,
@@ -52,28 +63,36 @@ const state = {
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
+const target = () => state.settings.targetLatencyMs;
+const readStorage = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
+const escapeHtml = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
 // ---------------------------------------------------------------- Persistence
 
 function load() {
   let saved = null;
+  let savedSettings = null;
   try {
-    saved = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+    saved = JSON.parse(readStorage(STORAGE_KEY) || 'null');
+    savedSettings = JSON.parse(readStorage(SETTINGS_KEY) || 'null');
   } catch {
     saved = null;
   }
+  state.settings = sanitizeSettings(savedSettings);
+  // Bản cũ lưu theme riêng: chuyển sang cài đặt mới.
+  const legacyTheme = readStorage(THEME_KEY);
+  if (!savedSettings && (legacyTheme === 'dark' || legacyTheme === 'light')) state.settings.theme = legacyTheme;
   const lights = saved?.lights?.length ? saved.lights : DEFAULT_LIGHTS.map((l) => ({ ...l, ...DEFAULT_LIGHT_STATE }));
   state.lights = withDerived(lights);
-  state.path = saved?.path in PATHS ? saved.path : 'local';
+  state.path = saved?.path in PATHS ? saved.path : state.settings.defaultPath;
   state.gatewayOnline = saved?.gatewayOnline ?? true;
-  state.theme = localStorage.getItem(THEME_KEY) || 'dark';
 }
 
 function save() {
   try {
-    const lights = state.lights.map(({ hops, rssi, ping, lastPacket, ...rest }) => rest);
+    const lights = state.lights.map(({ hops, rssi, ping, lastPacket, identifyUntil, ...rest }) => rest);
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ lights, path: state.path, gatewayOnline: state.gatewayOnline }));
-    localStorage.setItem(THEME_KEY, state.theme);
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   } catch {
     /* localStorage có thể bị chặn — demo vẫn chạy bình thường */
   }
@@ -84,26 +103,40 @@ function withDerived(lights) {
     ...l,
     fx: l.fx ?? l.x,
     fy: l.fy ?? l.y,
+    fw: l.fw ?? DEFAULT_FIRMWARE,
     rssi: -44 - l.hops * 9 - (i % 3) * 3
   }));
 }
 
 // ---------------------------------------------------------------- Theme Switcher
 
-function applyTheme(theme) {
+const darkQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
+
+function applyTheme() {
+  const theme = resolveTheme(state.settings.theme, darkQuery?.matches ?? true);
   state.theme = theme;
   document.documentElement.setAttribute('data-theme', theme);
   const isDark = theme === 'dark';
   $('#theme-icon').textContent = isDark ? '🌙' : '☀️';
   $('#theme-text').textContent = isDark ? 'Tối' : 'Sáng';
   $('meta[name="theme-color"]').setAttribute('content', isDark ? '#0E1116' : '#F8FAFC');
-  save();
+  document.documentElement.classList.toggle('no-motion', !state.settings.animations);
 }
 
 function toggleTheme() {
-  const next = state.theme === 'dark' ? 'light' : 'dark';
-  applyTheme(next);
-  toast(`Đã chuyển sang giao diện: ${next === 'dark' ? 'Tối (Dark Mode)' : 'Sáng (Light Mode)'}`);
+  updateSettings({ theme: state.theme === 'dark' ? 'light' : 'dark' });
+  toast(`Đã chuyển sang giao diện ${state.theme === 'dark' ? 'Tối' : 'Sáng'}`);
+}
+
+// Gộp thay đổi cài đặt, kiểm tra hợp lệ, lưu và áp dụng ngay.
+function updateSettings(patch) {
+  state.settings = sanitizeSettings({ ...state.settings, ...patch });
+  save();
+  applyTheme();
+  renderGateway();
+  if (state.view === 'api') selectApiEndpoint(state.activeApiIndex);
+  views.settings?.render();
+  return state.settings;
 }
 
 // ---------------------------------------------------------------- Mesh transport (mô phỏng)
@@ -129,7 +162,9 @@ function transmit({ bytes, dst, targets, record = true, animate = true, ack = fa
   const segments = segmentsNeeded(bytes.length);
   // Qua GATT Proxy: điện thoại kết nối node gần nhất nên bớt 1 hop so với gateway.
   const nodes = targets.map((l) => ({ id: l.id, hops: path === 'proxy' ? Math.max(1, l.hops - 1) : l.hops }));
-  const result = simulateGroupLatency(nodes, { path, segments, ack });
+  const scale = LOAD_PROFILES[state.settings.loadProfile]?.scale ?? 1;
+  const result = simulateGroupLatency(nodes, { path, segments, ack, scale });
+  const outOfRange = nodes.filter((n) => n.hops > state.settings.ttl).length;
 
   const entry = {
     time: new Date(),
@@ -139,16 +174,23 @@ function transmit({ bytes, dst, targets, record = true, animate = true, ack = fa
     opcode: opcodeName(bytes),
     hex: toHex(bytes),
     segments,
-    ttl: MESH_LIMITS.defaultTtl,
-    latency: result.total,
+    ttl: state.settings.ttl,
+    latency: result.oneWay,
+    rtt: ack ? result.total : null,
     slowestId: result.slowest?.node.id ?? null,
     targets: targets.length,
+    outOfRange,
     isAck: ack
   };
 
+  if (outOfRange && record) toast(`${outOfRange} đèn ở xa hơn ${state.settings.ttl} hop — vượt TTL, gói có thể không tới`);
   if (record) {
-    state.samples.push(result.total);
+    state.samples.push(result.oneWay);
     if (state.samples.length > 500) state.samples.shift();
+    if (ack) {
+      state.rttSamples.push(result.total);
+      if (state.rttSamples.length > 500) state.rttSamples.shift();
+    }
     state.log.unshift(entry);
     if (state.log.length > 200) state.log.pop();
     state.lastResult = { ...result, entry };
@@ -164,7 +206,7 @@ function transmit({ bytes, dst, targets, record = true, animate = true, ack = fa
 const throttleMap = new Map();
 function throttled(key, fn) {
   const now = performance.now();
-  if (now - (throttleMap.get(key) ?? 0) < SLIDER_THROTTLE_MS) return;
+  if (now - (throttleMap.get(key) ?? 0) < state.settings.throttleMs) return;
   throttleMap.set(key, now);
   fn();
 }
@@ -247,6 +289,87 @@ function recallScene(sceneId, scope) {
   toast(`Cảnh “${scene.name}” → ${lights.length} đèn · ${result.total} ms`);
 }
 
+// ---------------------------------------------------------------- Quản lý thiết bị
+
+// Nháy nhận diện: Health Attention Set → đèn nhấp nháy trong N giây.
+function identifyLight(id, seconds = state.settings.attentionSeconds) {
+  const light = lightById(id);
+  if (!light) return null;
+  const { entry } = transmit({ bytes: encodeAttentionSet({ seconds, ack: true }), dst: light.unicast, targets: [light], ack: true });
+  light.lastPacket = entry;
+  light.identifyUntil = Date.now() + seconds * 1000;
+  paintIdentify();
+  setTimeout(paintIdentify, seconds * 1000 + 50);
+  toast(`“${light.name}” đang nháy ${seconds} giây để nhận diện`);
+  return entry;
+}
+
+function paintIdentify() {
+  const now = Date.now();
+  state.lights.forEach((l) => {
+    const on = (l.identifyUntil ?? 0) > now;
+    $$(`[data-light="${l.id}"], [data-fp-light="${l.id}"], [data-device-row="${l.id}"]`).forEach((el) => el.classList.toggle('identify', on));
+  });
+}
+
+function renameLight(id, name) {
+  const light = lightById(id);
+  const clean = String(name).trim().slice(0, 40);
+  if (!light || !clean) return false;
+  light.name = clean;
+  rebuildAll();
+  return true;
+}
+
+// Chuyển phòng = ghi đè subscription của model Light CTL sang group của phòng mới.
+function moveLight(id, roomId) {
+  const light = lightById(id);
+  const room = roomById.get(roomId);
+  if (!light || !room || light.room === roomId) return false;
+  const { entry } = transmit({
+    bytes: encodeSubscriptionOverwrite({ elementAddress: light.unicast, groupAddress: room.group }),
+    dst: light.unicast,
+    targets: [light],
+    ack: true
+  });
+  light.lastPacket = entry;
+  light.room = roomId;
+  const b = room.bounds;
+  light.fx = Math.round(b.x + 8 + Math.random() * (b.w - 16));
+  light.fy = Math.round(b.y + 10 + Math.random() * (b.h - 18));
+  rebuildAll();
+  return true;
+}
+
+// Xoá khỏi mạng: Config Node Reset. Đèn con đang relay qua nó được nối lên node cha.
+function removeLight(id) {
+  const light = lightById(id);
+  if (!light) return false;
+  transmit({ bytes: encodeNodeReset(), dst: light.unicast, targets: [light], ack: true });
+  const rest = state.lights
+    .filter((l) => l.id !== id)
+    .map(({ hops, rssi, ...l }) => (l.via === id ? { ...l, via: light.via } : l));
+  state.lights = withDerived(rest);
+  if (state.openLightId === id) $('#device-sheet').close();
+  rebuildAll();
+  return true;
+}
+
+function rebuildAll() {
+  save();
+  buildHome();
+  if (state.view === 'floorplan') { buildFloorplan(); renderFloorplanStats(); }
+  if (state.view === 'mesh') { buildTopology(); renderNodeTable(); }
+  views.devices?.render();
+  views.testbench?.renderTargets();
+  paintIdentify();
+}
+
+function nextLightId() {
+  const nums = state.lights.map((l) => Number(String(l.id).replace(/\D/g, ''))).filter(Number.isFinite);
+  return `L${(nums.length ? Math.max(...nums) : 0) + 1}`;
+}
+
 // ---------------------------------------------------------------- Rendering helpers
 
 function glow(light) {
@@ -259,7 +382,7 @@ function paintBulb(el, light) {
 }
 
 function latencyClass(ms) {
-  return ms < MESH_LIMITS.targetLatencyMs ? 'lat-ok' : 'lat-bad';
+  return ms < target() ? 'lat-ok' : 'lat-bad';
 }
 
 function average(values) {
@@ -286,6 +409,7 @@ function refresh() {
   if (state.view === 'floorplan') { updateFloorplan(); renderFloorplanStats(); }
   if (state.view === 'scenes') updateScenes();
   if (state.view === 'mesh') { updateTopology(); renderNodeTable(); }
+  if (state.view === 'devices') views.devices?.render();
 }
 
 // ---------------------------------------------------------------- Top bar & navigation
@@ -303,6 +427,12 @@ function setView(view) {
   if (view === 'mesh') { buildTopology(); renderMeshStats(); renderNodeTable(); }
   if (view === 'api') buildApiConsole();
   if (view === 'log') renderLog();
+  if (view === 'devices') views.devices?.render();
+  if (view === 'test') views.testbench?.render();
+  if (view === 'settings') views.settings?.render();
+  $('#nav-more').classList.toggle('is-active', $(`.nav-secondary[data-view="${view}"]`) !== null);
+  if ($('#more-sheet').open) $('#more-sheet').close();
+  paintIdentify();
   window.scrollTo({ top: 0 });
 }
 
@@ -314,13 +444,15 @@ function renderLatencyPill() {
   const pill = $('#latency-pill');
   const last = state.lastResult;
   pill.classList.toggle('is-idle', !last);
-  pill.classList.toggle('is-late', !!last && last.total >= MESH_LIMITS.targetLatencyMs);
-  $('#latency-pill-text').textContent = last ? `${last.total.toFixed(1)} ms · ${PATHS[last.entry.path].short}` : '— ms';
+  pill.classList.toggle('is-late', !!last && last.oneWay >= target());
+  $('#latency-pill-text').textContent = last ? `${last.oneWay.toFixed(1)} ms · ${PATHS[last.entry.path].short}` : '— ms';
+  pill.title = `Độ trễ một chiều của lệnh gần nhất (mục tiêu < ${target()} ms)`;
 }
 
 function renderGateway() {
   $('#nav-gateway').classList.toggle('is-offline', !state.gatewayOnline);
-  $('#nav-gateway-text').textContent = state.gatewayOnline ? `Online · ${formatAddress(ADDRESS.GATEWAY)}` : 'Offline · dùng BLE Proxy';
+  $('#nav-gateway-name').textContent = `Gateway ${state.settings.gatewayName}`;
+  $('#nav-gateway-text').textContent = state.gatewayOnline ? `Online · ${state.settings.gatewayHost}` : 'Offline · dùng BLE Proxy';
   $('#gateway-online').checked = state.gatewayOnline;
   $('#topology .gw')?.classList.toggle('offline', !state.gatewayOnline);
   $('#floorplan-svg .fp-gw')?.classList.toggle('offline', !state.gatewayOnline);
@@ -354,16 +486,16 @@ function buildHome() {
       <div class="device-grid">
         ${roomLights(room.id).map((l) => `
           <article class="device" data-light="${l.id}">
-            <button type="button" class="device-open" aria-label="Mở ${l.name}"></button>
+            <button type="button" class="device-open" aria-label="Mở ${escapeHtml(l.name)}"></button>
             <div class="device-top">
               <span class="bulb" aria-hidden="true"></span>
-              <label class="switch-row"><input type="checkbox" data-action="light-toggle" aria-label="Bật/tắt ${l.name}" /><span class="switch"></span></label>
+              <label class="switch-row"><input type="checkbox" data-action="light-toggle" aria-label="Bật/tắt ${escapeHtml(l.name)}" /><span class="switch"></span></label>
             </div>
             <div>
-              <div class="device-name">${l.name}</div>
+              <div class="device-name">${escapeHtml(l.name)}</div>
               <div class="device-meta"></div>
             </div>
-          </article>`).join('') || '<p class="muted">Chưa có đèn.</p>'}
+          </article>`).join('') || '<p class="muted small">Phòng chưa có đèn. Vào <b>Thiết bị</b> để quét và thêm đèn.</p>'}
       </div>
     </section>`).join('');
 
@@ -374,7 +506,7 @@ function buildHome() {
 function updateHome() {
   const on = state.lights.filter((l) => l.on);
   const watts = state.lights.reduce((s, l) => s + estimatePowerW(l.watts, l.on, l.lightness), 0);
-  const stats = latencyStats(state.samples);
+  const stats = latencyStats(state.samples, target());
   $('#summary').innerHTML = `
     <div class="card"><small>Đèn đang bật</small><b>${on.length}/${state.lights.length}</b></div>
     <div class="card"><small>Công suất tổng (ước tính)</small><b>${watts.toFixed(1)} W</b></div>
@@ -485,7 +617,7 @@ function buildFloorplan() {
   // 5. Đèn (Fixtures)
   const fixtures = state.lights.map((l) => `
     <g class="fp-fixture${l.relay ? ' relay' : ''}${l.on ? '' : ' is-off'}" data-fp-light="${l.id}">
-      <title>${l.name} (${l.room}) · ${l.watts}W · ${l.on ? `${l.kelvin}K · ${l.lightness}%` : 'Đang tắt'}</title>
+      <title>${escapeHtml(l.name)} (${l.room}) · ${l.watts}W · ${l.on ? `${l.kelvin}K · ${l.lightness}%` : 'Đang tắt'}</title>
       <circle class="fp-fixture-base" cx="${l.fx}" cy="${l.fy}" r="4.2" />
       <circle class="fp-fixture-ring" cx="${l.fx}" cy="${l.fy}" r="3.4" fill="none" />
       <circle class="fp-fixture-core" cx="${l.fx}" cy="${l.fy}" r="2.4" fill="${l.on ? kelvinToHex(l.kelvin) : '#3a4250'}" />
@@ -678,6 +810,7 @@ function updateSheet() {
   lamp.classList.toggle('is-off', !light.on);
   $('#sheet-room').textContent = `${room.icon} ${room.name} · LED ${light.watts}W CCT`;
   $('#sheet-title').textContent = light.name;
+  $('#sheet-identify').disabled = false;
   $('#sheet-on').checked = light.on;
 
   const lightness = $('#sheet-lightness');
@@ -821,20 +954,23 @@ function flashTopology(targets, path) {
 }
 
 function renderMeshStats() {
-  const s = latencyStats(state.samples);
+  const s = latencyStats(state.samples, target());
+  const r = latencyStats(state.rttSamples, Infinity);
   const last = state.lastResult;
   const cell = (label, value, cls = '') => `<div class="stat ${cls}"><small>${label}</small><b>${value}</b></div>`;
-  const okCls = (v) => (s.count ? (v < MESH_LIMITS.targetLatencyMs ? 'ok' : 'bad') : '');
+  const okCls = (v) => (s.count ? (v < target() ? 'ok' : 'bad') : '');
   const jitterCls = (j) => (s.count ? (j < 5 ? 'jitter-ok' : j < 15 ? 'jitter-warn' : 'jitter-bad') : '');
 
+  $('#target-tag').textContent = `Mục tiêu một chiều < ${target()} ms`;
   $('#latency-stats').innerHTML = [
-    cell('Gần nhất', last ? `${last.total} ms` : '—', last ? okCls(last.total) : ''),
+    cell('Gần nhất (1 chiều)', last ? `${last.oneWay} ms` : '—', last ? okCls(last.oneWay) : ''),
     cell('Trung bình', s.count ? `${s.avg} ms` : '—', okCls(s.avg)),
     cell('P95', s.count ? `${s.p95} ms` : '—', okCls(s.p95)),
     cell('Max', s.count ? `${s.max} ms` : '—', okCls(s.max)),
-    cell('Jitter TB', s.count ? `${s.jitterAvg} ms` : '—', jitterCls(s.jitterAvg)),
-    cell('Jitter hiện tại', s.count ? `${s.jitterCurrent} ms` : '—', jitterCls(s.jitterCurrent)),
-    cell('Đạt < 50 ms', s.count ? `${s.withinTarget}%` : '—', s.count ? (s.withinTarget >= 95 ? 'ok' : 'bad') : ''),
+    cell('Jitter TB (IPDV)', s.count ? `${s.jitterAvg} ms` : '—', jitterCls(s.jitterAvg)),
+    cell(`Đạt < ${target()} ms`, s.count ? `${s.withinTarget}%` : '—', s.count ? (s.withinTarget >= 95 ? 'ok' : 'bad') : ''),
+    cell('Khứ hồi Ack TB', r.count ? `${r.avg} ms` : '—'),
+    cell('Khứ hồi Ack P95', r.count ? `${r.p95} ms` : '—'),
     cell('Tổng số lệnh', s.count)
   ].join('');
 
@@ -847,11 +983,11 @@ function renderSparkline() {
   const data = state.samples.slice(-80);
   const W = 300;
   const H = 90;
-  const maxY = Math.max(80, ...data) * 1.1;
+  const maxY = Math.max(target() * 1.6, ...data) * 1.1;
   const y = (v) => H - (v / maxY) * H;
-  const thr = y(MESH_LIMITS.targetLatencyMs);
+  const thr = y(target());
   if (data.length < 2) {
-    svg.innerHTML = `<line class="threshold" x1="0" x2="${W}" y1="${thr}" y2="${thr}" /><text x="4" y="${thr - 4}">50 ms</text>`;
+    svg.innerHTML = `<line class="threshold" x1="0" x2="${W}" y1="${thr}" y2="${thr}" /><text x="4" y="${thr - 4}">${target()} ms</text>`;
     return;
   }
   const step = W / (data.length - 1);
@@ -860,7 +996,7 @@ function renderSparkline() {
     <polygon class="area" points="0,${H} ${pts.join(' ')} ${W},${H}" />
     <polyline class="line" points="${pts.join(' ')}" />
     <line class="threshold" x1="0" x2="${W}" y1="${thr}" y2="${thr}" />
-    <text x="4" y="${thr - 4}">50 ms</text>`;
+    <text x="4" y="${thr - 4}">${target()} ms</text>`;
 }
 
 function renderBreakdown() {
@@ -880,18 +1016,19 @@ function renderBreakdown() {
       <div><span class="bd-label">${p.label}</span><div class="bd-bar" style="width:${Math.max(2, (p.ms / slow.total) * 100)}%"></div></div>
       <b>${p.ms.toFixed(1)} ms</b>
     </div>`).join('') +
-    `<div class="bd-row bd-total"><span>Tổng phản hồi</span><b class="${latencyClass(slow.total)}">${slow.total} ms</b></div>`;
+    `<div class="bd-row bd-total"><span>Một chiều (lệnh → đèn)</span><b class="${latencyClass(slow.oneWay)}">${slow.oneWay} ms</b></div>` +
+    (slow.isAck ? `<div class="bd-row bd-total"><span>Khứ hồi (Status về app)</span><b>${slow.total} ms</b></div>` : '');
 }
 
 function renderNodeTable() {
-  $('#node-count').textContent = `${state.lights.length} node · TTL ${MESH_LIMITS.defaultTtl} · tối đa ${MESH_LIMITS.maxHops} hop`;
+  $('#node-count').textContent = `${state.lights.length} node · TTL ${state.settings.ttl} · tối đa ${state.settings.ttl} hop`;
   $('#node-table tbody').innerHTML = state.lights.map((l) => {
     const room = roomById.get(l.room);
     const status = l.ping != null
       ? `<span class="${latencyClass(l.ping)}">Online · ${l.ping} ms</span>`
       : '<span class="lat-ok">Online</span>';
     return `<tr>
-      <td>${l.name}</td>
+      <td>${escapeHtml(l.name)}</td>
       <td class="mono">${formatAddress(l.unicast)}</td>
       <td class="mono">${formatAddress(room.group)}</td>
       <td>${l.hops}</td>
@@ -923,7 +1060,7 @@ async function simulateSweep(btn) {
     setLight(light.id, { on: !light.on }, { ack: true, send: true });
     await new Promise((r) => setTimeout(r, 90));
   }
-  const s = latencyStats(state.samples);
+  const s = latencyStats(state.samples, target());
   toast(`Hoàn tất quét tuần tự ${state.lights.length} đèn · Jitter TB: ${s.jitterAvg} ms · Trễ TB: ${s.avg} ms`);
   btn.disabled = false;
 }
@@ -944,7 +1081,7 @@ async function simulateCircadian(btn) {
     refresh();
     await new Promise((r) => setTimeout(r, 120));
   }
-  const s = latencyStats(state.samples);
+  const s = latencyStats(state.samples, target());
   toast(`Mô phỏng nhịp sinh học thành công · Jitter TB: ${s.jitterAvg} ms · Jitter Max: ${s.jitterMax} ms`);
   btn.disabled = false;
 }
@@ -968,9 +1105,20 @@ async function stressTest(button) {
     transmit({ bytes, dst: useGroup ? room.group : targets[0].unicast, targets, animate: i % 10 === 0, ack: isAck });
     if (i % 10 === 0) await new Promise((r) => setTimeout(r, 30));
   }
-  const s = latencyStats(state.samples.slice(before));
-  toast(`100 lệnh · TB ${s.avg} ms · Jitter TB ${s.jitterAvg} ms · ${s.withinTarget}% < 50 ms`);
+  const s = latencyStats(state.samples.slice(before), target());
+  toast(`100 lệnh · một chiều TB ${s.avg} ms · P95 ${s.p95} ms · ${s.withinTarget}% < ${target()} ms`);
   button.disabled = false;
+}
+
+function clearMetrics() {
+  state.samples = [];
+  state.rttSamples = [];
+  state.lastResult = null;
+  state.log = [];
+  renderLatencyPill();
+  updateHome();
+  if (state.view === 'mesh') renderMeshStats();
+  if (state.view === 'log') renderLog();
 }
 
 function bindMesh() {
@@ -979,11 +1127,7 @@ function bindMesh() {
   $('#btn-sim-circadian').addEventListener('click', (e) => simulateCircadian(e.currentTarget));
   $('#btn-stress').addEventListener('click', (e) => stressTest(e.currentTarget));
   $('#btn-reset-stats').addEventListener('click', () => {
-    state.samples = [];
-    state.lastResult = null;
-    renderMeshStats();
-    renderLatencyPill();
-    updateHome();
+    clearMetrics();
     toast('Đã xoá toàn bộ số liệu thống kê độ trễ và Jitter.');
   });
   $('#gateway-online').addEventListener('change', (e) => {
@@ -1025,7 +1169,7 @@ function selectApiEndpoint(index) {
   $('#api-req-method-path').textContent = `${item.method} ${item.path}`;
   $('#api-request-body').value = item.sampleBody ? JSON.stringify(item.sampleBody, null, 2) : '';
   $('#api-request-body').placeholder = item.sampleBody ? 'JSON Request Body...' : 'Endpoint này không yêu cầu Request Body (GET)';
-  $('#api-curl-code').textContent = item.sampleCurl;
+  $('#api-curl-code').textContent = buildCurl(item, gatewayBaseUrl(state.settings));
 }
 
 function runApiCall() {
@@ -1038,29 +1182,16 @@ function runApiCall() {
     try {
       body = JSON.parse(rawBody);
     } catch (e) {
-      alert('Request Body không phải là JSON hợp lệ: ' + e.message);
+      toast(`Request Body không phải JSON hợp lệ: ${e.message}`);
       return;
     }
   }
-
-  const context = {
-    state,
-    lightById,
-    roomLights,
-    setLight,
-    setRoom,
-    recallScene,
-    latencyStats,
-    SCENES,
-    NEW_DEVICE_CANDIDATES,
-    quickProvision
-  };
 
   const res = executeApiRequest({
     method: item.method,
     path: item.path,
     body,
-    context
+    context: apiContext()
   });
 
   const resStatus = $('#api-res-status');
@@ -1073,6 +1204,13 @@ function runApiCall() {
   refresh();
 }
 
+function apiContext() {
+  return {
+    state, lightById, roomLights, setLight, setRoom, recallScene, latencyStats,
+    SCENES, NEW_DEVICE_CANDIDATES, quickProvision, removeLight, identifyLight
+  };
+}
+
 function renderApiLogTable() {
   const tbody = $('#api-log-table tbody');
   $('#api-log-empty').hidden = apiCallHistory.length > 0;
@@ -1083,7 +1221,7 @@ function renderApiLogTable() {
       <td>${timeStr}</td>
       <td><span class="method-badge ${h.method.toLowerCase()}">${h.method}</span></td>
       <td>${h.path}</td>
-      <td><span class="status-pill ${h.status === 200 ? 'ok' : 'err'}">${h.status}</span></td>
+      <td><span class="status-pill ${h.status < 300 ? 'ok' : 'err'}">${h.status}</span></td>
       <td>${h.timeMs} ms</td>
       <td>${msg}</td>
     </tr>`;
@@ -1105,9 +1243,7 @@ function bindApiConsole() {
   });
 
   $('#btn-copy-curl').addEventListener('click', () => {
-    const code = $('#api-curl-code').textContent;
-    navigator.clipboard?.writeText(code);
-    toast('Đã sao chép lệnh cURL vào clipboard!');
+    copyText($('#api-curl-code').textContent, 'Đã sao chép lệnh cURL');
   });
 
   $('#btn-clear-api-log').addEventListener('click', () => {
@@ -1119,18 +1255,19 @@ function bindApiConsole() {
 
 // ---------------------------------------------------------------- 7. Provisioning Flow
 
-function quickProvision(target, roomId) {
+function quickProvision(target, roomId, name) {
   const room = roomById.get(roomId) || ROOMS[0];
-  const unicast = Math.max(...state.lights.map((l) => l.unicast)) + 1;
+  const unicast = Math.max(1, ...state.lights.map((l) => l.unicast)) + 1;
   const parent = roomLights(room.id).find((l) => l.relay) ?? state.lights.find((l) => l.relay && l.hops === 1);
   const bounds = room.bounds || { x: 20, y: 20, w: 30, h: 30 };
   const fx = Math.round(bounds.x + 8 + Math.random() * (bounds.w - 16));
   const fy = Math.round(bounds.y + 8 + Math.random() * (bounds.h - 16));
 
   const newLight = {
-    id: `L${state.lights.length + 1}`,
+    id: nextLightId(),
     uuid: target.uuid,
-    name: `${target.model.replace(' CCT', '')}`,
+    name: (name && String(name).trim().slice(0, 40)) || target.model.replace(' CCT', ''),
+    fw: target.fw ?? DEFAULT_FIRMWARE,
     room: room.id,
     unicast,
     watts: target.watts,
@@ -1144,16 +1281,16 @@ function quickProvision(target, roomId) {
   };
 
   state.lights = withDerived([...state.lights.map(({ hops, rssi, ...rest }) => rest), newLight]);
-  save();
-  buildHome();
-  if (state.view === 'floorplan') buildFloorplan();
-  if (state.view === 'mesh') { buildTopology(); renderNodeTable(); }
-  return newLight;
+  views.devices?.forget(target.uuid);
+  rebuildAll();
+  return lightById(newLight.id);
 }
 
-function openProvisioning() {
+// Mở hộp thoại thêm đèn; `device` = thiết bị đã chọn từ màn hình Quét (bỏ qua bước chọn).
+function openProvisioning(device = null) {
   const taken = new Set(state.lights.map((l) => l.uuid).filter(Boolean));
   const list = NEW_DEVICE_CANDIDATES.filter((c) => !taken.has(c.uuid));
+  $('#prov-title').textContent = 'Thêm đèn mới';
   $('#prov-scan').hidden = false;
   $('#prov-run').hidden = true;
   $('#prov-candidates').innerHTML = list.length
@@ -1164,6 +1301,17 @@ function openProvisioning() {
   $('#prov-steps').innerHTML = PROVISIONING_STEPS.map((s) => `<li data-step="${s.id}"><span><b>${s.title}</b><small>${s.detail}</small></span></li>`).join('');
   $('#prov-start').disabled = false;
   $('#provision-dialog').showModal();
+  if (device) chooseProvisionTarget(device);
+}
+
+function chooseProvisionTarget(device) {
+  state.provisionTarget = device;
+  $('#prov-title').textContent = device.model;
+  $('#prov-meta').textContent = `UUID ${device.uuid} · ${device.rssi} dBm · firmware ${device.fw ?? DEFAULT_FIRMWARE} · ${device.oob ?? 'Static OOB'}`;
+  $('#prov-name').value = device.model.replace(' CCT', '');
+  $('#prov-scan').hidden = true;
+  $('#prov-run').hidden = false;
+  $('#prov-name').focus();
 }
 
 function bindProvisioning() {
@@ -1173,10 +1321,7 @@ function bindProvisioning() {
   $('#prov-candidates').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-uuid]');
     if (!btn) return;
-    state.provisionTarget = NEW_DEVICE_CANDIDATES.find((c) => c.uuid === btn.dataset.uuid);
-    $('#prov-title').textContent = state.provisionTarget.model;
-    $('#prov-scan').hidden = true;
-    $('#prov-run').hidden = false;
+    chooseProvisionTarget(NEW_DEVICE_CANDIDATES.find((c) => c.uuid === btn.dataset.uuid));
   });
 
   $('#prov-start').addEventListener('click', async (e) => {
@@ -1193,9 +1338,9 @@ function bindProvisioning() {
       li.classList.replace('is-running', 'is-done');
     }
 
-    const light = quickProvision(state.provisionTarget, roomId);
+    const light = quickProvision(state.provisionTarget, roomId, $('#prov-name').value);
     dialog.close();
-    toast(`Đã gia nhập “${light.name}” vào ${room.name} trên Sơ đồ nhà và Mạng Mesh!`);
+    toast(`Đã thêm “${light.name}” vào ${room.name} · ${formatAddress(light.unicast)}`);
   });
 }
 
@@ -1212,7 +1357,7 @@ function renderLog() {
     <td>${e.hex}</td>
     <td>${e.segments}</td>
     <td>${e.ttl}</td>
-    <td class="${latencyClass(e.latency)}">${e.latency} ms</td>
+    <td class="${latencyClass(e.latency)}">${e.latency} ms${e.rtt != null ? ` <span class="muted">/ ${e.rtt}</span>` : ''}</td>
   </tr>`).join('');
 }
 
@@ -1230,26 +1375,98 @@ function bindLog() {
 
 // ---------------------------------------------------------------- 9. Init
 
-function init() {
-  load();
-  applyTheme(state.theme);
+// ---------------------------------------------------------------- Tiện ích chung cho các màn hình
 
-  // Gắn API vào global scope window.HomeMeshAPI
-  registerGlobalApi({
-    state,
-    lightById,
-    roomLights,
-    setLight,
-    setRoom,
-    recallScene,
-    latencyStats,
-    SCENES,
-    NEW_DEVICE_CANDIDATES,
-    quickProvision
+function copyText(text, message) {
+  const done = () => toast(message);
+  if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => toast('Không sao chép được — hãy chọn và copy thủ công'));
+  else toast('Trình duyệt không cho sao chép tự động');
+}
+
+// Hộp thoại xác nhận, trả về Promise<boolean>.
+function confirmAsk(title, message, okLabel = 'Xác nhận') {
+  const dialog = $('#confirm-dialog');
+  $('#confirm-title').textContent = title;
+  $('#confirm-message').textContent = message;
+  $('#confirm-ok').textContent = okLabel;
+  dialog.showModal();
+  return new Promise((resolve) => {
+    const finish = (value) => {
+      dialog.close();
+      $('#confirm-ok').onclick = null;
+      $('#confirm-cancel').onclick = null;
+      resolve(value);
+    };
+    $('#confirm-ok').onclick = () => finish(true);
+    $('#confirm-cancel').onclick = () => finish(false);
+    dialog.onclose = () => resolve(false);
+  });
+}
+
+function downloadJson(data, filename) {
+  const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+}
+
+function replaceLights(lights) {
+  state.lights = withDerived(lights.map(({ hops, rssi, ...l }) => l));
+  rebuildAll();
+}
+
+function resetAll() {
+  try {
+    [STORAGE_KEY, SETTINGS_KEY, THEME_KEY].forEach((k) => localStorage.removeItem(k));
+  } catch { /* bỏ qua */ }
+  state.settings = sanitizeSettings(null);
+  state.path = state.settings.defaultPath;
+  state.gatewayOnline = true;
+  clearMetrics();
+  replaceLights(DEFAULT_LIGHTS.map((l) => ({ ...l, ...DEFAULT_LIGHT_STATE })));
+  applyTheme();
+  renderPathControl();
+  renderGateway();
+}
+
+function context() {
+  return {
+    state, $, $$, toast, escapeHtml, target, transmit, nextTid,
+    lightById, roomLights, roomById, setLight, setRoom, recallScene,
+    identifyLight, paintIdentify, renameLight, moveLight, removeLight, openProvisioning,
+    refresh, rebuildAll, replaceLights, resetAll, clearMetrics, updateSettings,
+    confirmAsk, copyText, downloadJson, latencyClass, effectivePath, showWelcome
+  };
+}
+
+function showWelcome() {
+  $('#welcome-dialog').showModal();
+}
+
+function bindShell() {
+  $$('.nav-item[data-view], .more-item').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
+  $('#nav-more').addEventListener('click', () => $('#more-sheet').showModal());
+  $('#more-sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  $('#theme-toggle').addEventListener('click', toggleTheme);
+  darkQuery?.addEventListener?.('change', () => { if (state.settings.theme === 'system') applyTheme(); });
+
+  $('#welcome-ok').addEventListener('click', () => {
+    try { localStorage.setItem(WELCOME_KEY, '1'); } catch { /* bỏ qua */ }
+    $('#welcome-dialog').close();
   });
 
-  $$('.nav-item').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
-  $('#theme-toggle').addEventListener('click', toggleTheme);
+  $('#sheet-identify').addEventListener('click', () => {
+    if (state.openLightId) identifyLight(state.openLightId);
+  });
+}
+
+function init() {
+  load();
+  applyTheme();
+  registerGlobalApi(apiContext());
+  bindShell();
 
   $('#path-control').addEventListener('click', (e) => {
     const btn = e.target.closest('[data-path]');
@@ -1268,11 +1485,24 @@ function init() {
   bindProvisioning();
   bindLog();
 
+  const ctx = context();
+  views.devices = mountDevices(ctx);
+  views.testbench = mountTestbench(ctx);
+  views.settings = mountSettings(ctx);
+
   buildHome();
   buildScenes();
   renderPathControl();
   renderLatencyPill();
   renderGateway();
+
+  const params = new URLSearchParams(location.search);
+  if (params.get('view') in VIEW_TITLES) setView(params.get('view'));
+  if (!readStorage(WELCOME_KEY) && !params.has('nowelcome')) showWelcome();
+
+  if ('serviceWorker' in navigator && window.isSecureContext) {
+    navigator.serviceWorker.register('sw.js').catch(() => { /* chạy được cả khi không có SW */ });
+  }
 }
 
 init();
