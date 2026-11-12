@@ -766,3 +766,73 @@ select {
   #device-table th:nth-child(6), #device-table td:nth-child(6) { display: none; }
   .sheet { max-height: 92vh; }
 }
+
+/* ---------- Sơ đồ nhà: sàn, nội thất, độ tối phòng ---------- */
+#floorplan-svg {
+  --fl-wood: #3a2f27; --fl-tile: #2f3337; --fl-seam: rgba(0, 0, 0, 0.35);
+  --fu-wood: #8a6446; --fu-wood-dark: #5b4130; --fu-fabric: #56647a; --fu-fabric-dark: #424e61;
+  --fu-sheet: #d9d4ca; --fu-blanket: #5878a8; --fu-metal: #aab1ba; --fu-counter: #b9b3a9;
+  --fu-dark: #22252a; --fu-rug: #6e4f45; --fu-leaf: #4f8f4c; --fu-pot: #b06a48; --fu-line: rgba(0, 0, 0, 0.45);
+}
+[data-theme="light"] #floorplan-svg {
+  --fl-wood: #e6d3bd; --fl-tile: #eceae5; --fl-seam: rgba(80, 60, 40, 0.18);
+  --fu-wood: #b98b62; --fu-wood-dark: #8a6446; --fu-fabric: #8b9bb3; --fu-fabric-dark: #6f8099;
+  --fu-sheet: #fbf9f4; --fu-blanket: #8fb0de; --fu-metal: #d5dadf; --fu-counter: #dcd6cc;
+  --fu-dark: #4a4e55; --fu-rug: #c9a99a; --fu-line: rgba(0, 0, 0, 0.25);
+}
+#floorplan-svg .fl-wood { fill: var(--fl-wood); }
+#floorplan-svg .fl-tile { fill: var(--fl-tile); }
+#floorplan-svg .fl-seam { stroke: var(--fl-seam); stroke-width: 0.15; fill: none; }
+#floorplan-svg .fp-furniture { pointer-events: none; }
+#floorplan-svg .fu rect, #floorplan-svg .fu circle { stroke: var(--fu-line); stroke-width: 0.18; }
+#floorplan-svg .fu-wood { fill: var(--fu-wood); }
+#floorplan-svg .fu-wood-dark { fill: var(--fu-wood-dark); }
+#floorplan-svg .fu-fabric { fill: var(--fu-fabric); }
+#floorplan-svg .fu-fabric-dark { fill: var(--fu-fabric-dark); }
+#floorplan-svg .fu-sheet, #floorplan-svg .fu-pillow { fill: var(--fu-sheet); }
+#floorplan-svg .fu-blanket { fill: var(--fu-blanket); }
+#floorplan-svg .fu-metal { fill: var(--fu-metal); }
+#floorplan-svg .fu-basin { fill: var(--fu-dark); opacity: 0.5; }
+#floorplan-svg .fu-counter { fill: var(--fu-counter); }
+#floorplan-svg .fu-dark, #floorplan-svg .fu-screen { fill: var(--fu-dark); }
+#floorplan-svg .fu-burner { fill: none; stroke: #e0703a !important; stroke-width: 0.3 !important; }
+#floorplan-svg .fu-glass { fill: #9fc0d4; opacity: 0.6; }
+#floorplan-svg .fu-rug { fill: var(--fu-rug); opacity: 0.85; }
+#floorplan-svg .fu-rug-inner { fill: none; stroke: rgba(255, 255, 255, 0.25) !important; stroke-dasharray: 0.8 0.6; }
+#floorplan-svg .fu-lamp { fill: #f3e2b8; }
+#floorplan-svg .fu-pot { fill: var(--fu-pot); }
+#floorplan-svg .fu-leaf { fill: var(--fu-leaf); opacity: 0.92; }
+#floorplan-svg .fu-line, #floorplan-svg .fu-seam { stroke: var(--fu-line); stroke-width: 0.2; }
+#floorplan-svg .fu-line-fill { fill: var(--fu-line); stroke: none !important; }
+#floorplan-svg .fu-book { stroke: none !important; }
+#floorplan-svg .fu-book.b0 { fill: #b94a48; } #floorplan-svg .fu-book.b1 { fill: #3e6fb0; }
+#floorplan-svg .fu-book.b2 { fill: #d9a441; } #floorplan-svg .fu-book.b3 { fill: #4c8b6b; }
+#floorplan-svg .fp-shade { fill: #05070b; pointer-events: none; transition: opacity 0.35s ease; }
+[data-theme="light"] #floorplan-svg .fp-shade { fill: #1d2430; }
+#floorplan-svg .fp-inner-wall { stroke-width: 1.3; }
+#floorplan-svg .fp-outer-wall { stroke-width: 1.6; }
+.no-motion #floorplan-svg .fp-shade { transition: none; }
+
+/* ---------- Mô hình 3D ---------- */
+#fp-mode { margin-left: auto; margin-right: 12px; }
+.fp3d { position: absolute; inset: 0; border-radius: inherit; overflow: hidden;
+  background: radial-gradient(120% 90% at 50% 20%, #232a36, #0d1015); }
+[data-theme="light"] .fp3d { background: radial-gradient(120% 90% at 50% 20%, #f4f6fa, #d9dee6); }
+.fp3d[hidden] { display: none; }
+.fp3d canvas { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+.fp3d-labels { position: absolute; inset: 0; pointer-events: none; }
+.fp3d-label, .fp3d-room { position: absolute; left: 0; top: 0; white-space: nowrap; font-family: var(--mono);
+  font-size: 11px; padding: 2px 6px; border-radius: 6px; background: rgba(14, 17, 22, 0.78); color: #f5f1e8; }
+.fp3d-label.off { color: #9aa3af; }
+.fp3d-room { font-family: var(--font); font-weight: 700; font-size: 12px; background: rgba(14, 17, 22, 0.55); }
+.fp3d-controls { position: absolute; right: 10px; bottom: 10px; display: flex; gap: 6px; }
+.fp3d-controls .btn { background: var(--surface); }
+.fp3d-loading { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; gap: 10px;
+  color: var(--muted); font-size: 13px; }
+.fp3d-loading[hidden] { display: none; }
+@media (max-width: 760px) {
+  .floorplan-card .card-head { flex-wrap: wrap; gap: 8px; }
+  #fp-mode { margin: 0; }
+  .fp3d-label { font-size: 10px; }
+}
+#floorplan-svg .fp-fixture-label { paint-order: stroke; stroke: var(--surface); stroke-width: 0.7px; stroke-linejoin: round; }

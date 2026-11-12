@@ -6,7 +6,7 @@
 node tests/model_test.mjs
 ```
 
-28 test: giới hạn Kelvin, màu 2700/6500 K, trộn kênh PWM, công suất không đổi khi đổi màu, lightness perceptual → linear, mã hoá opcode/payload (gồm Health Attention, Config Node Reset, Subscription Overwrite), số segment, TID, topology ≤ 3 hop, worst-case LAN 3 hop < 50 ms, cloud > 50 ms, độ trễ group, độ trễ một chiều tách khỏi khứ hồi, hệ số tải mạng, thống kê và jitter, mặt bằng nhà, API (GET/PUT, cURL, DELETE, identify), cài đặt hợp lệ, sao lưu/khôi phục, lịch quét thiết bị, Web Bluetooth, lệnh điều khiển thử.
+29 test: giới hạn Kelvin, màu 2700/6500 K, trộn kênh PWM, công suất không đổi khi đổi màu, lightness perceptual → linear, mã hoá opcode/payload (gồm Health Attention, Config Node Reset, Subscription Overwrite), số segment, TID, topology ≤ 3 hop, worst-case LAN 3 hop < 50 ms, cloud > 50 ms, độ trễ group, độ trễ một chiều tách khỏi khứ hồi, hệ số tải mạng, thống kê và jitter, mặt bằng nhà, API (GET/PUT, cURL, DELETE, identify), cài đặt hợp lệ, sao lưu/khôi phục, lịch quét thiết bị, Web Bluetooth, lệnh điều khiển thử, nội thất nằm trong phòng.
 
 ## Thủ công
 
@@ -40,3 +40,9 @@ node tests/model_test.mjs
 | 26 | Điện thoại 390 px → nút Thêm | Mở bảng 5 màn hình kỹ thuật; không màn hình nào bị tràn ngang |
 | 27 | Mở link lần đầu | Hiện hộp hướng dẫn; bấm Bắt đầu thì lần sau không hiện lại |
 | 28 | Cài như app (Android Chrome), tắt mạng, mở lại | App mở toàn màn hình, vẫn chạy khi offline |
+| 29 | Sơ đồ nhà → tắt Phòng ngủ | Phòng ngủ tối hẳn trên bản 2D, các phòng khác vẫn sáng |
+| 30 | Bấm **3D** | Hiện mô hình 3D có nội thất; phòng có đèn bật được chiếu sáng theo màu của đèn |
+| 31 | Kéo chuột / cuộn chuột trên mô hình 3D | Căn hộ xoay, phóng to / thu nhỏ; **Góc nhìn** đưa về như cũ |
+| 32 | Click một đèn trên trần (3D) | Đèn bật/tắt, phòng sáng/tối theo; click đúp mở bảng chỉnh màu |
+| 33 | Kéo Nhiệt độ màu 2700 → 6500 K khi đang xem 3D | Ánh sáng trong phòng đổi từ vàng ấm sang trắng |
+| 34 | Tải lại trang | Sơ đồ nhà mở lại đúng kiểu xem 2D / 3D đã chọn |

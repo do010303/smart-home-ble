@@ -2,7 +2,7 @@
 
 import { LOAD_PROFILES, PATHS } from './mesh.js';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.1.0';
 export const SETTINGS_KEY = 'homemesh-settings-v1';
 export const BACKUP_FORMAT = 'homemesh-backup';
 

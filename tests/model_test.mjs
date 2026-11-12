@@ -16,7 +16,8 @@ import { buildCommand, expectsStatus, paramsForIteration, statePatch } from '../
 import {
   encodeAttentionSet, encodeNodeReset, encodeSubscriptionOverwrite, encodeLightnessSet
 } from '../js/mesh.js';
-import { NEW_DEVICE_CANDIDATES } from '../js/data.js';
+import { NEW_DEVICE_CANDIDATES, FURNITURE, FLOORS } from '../js/data.js';
+import { furnitureSvg } from '../js/ui/furniture2d.js';
 
 let passed = 0;
 const test = (name, fn) => { fn(); passed += 1; console.log(`✓ ${name}`); };
@@ -274,6 +275,22 @@ test('API: cURL theo địa chỉ gateway, có endpoint xoá và nháy đèn', (
   assert.ok(buildCurl(put, 'http://10.0.0.2:9000').startsWith('curl -X PUT http://10.0.0.2:9000/api/v1/lights/L1'));
   assert.ok(API_CATALOG.some((a) => a.method === 'DELETE'));
   assert.ok(API_CATALOG.some((a) => a.path.endsWith('/identify')));
+});
+
+test('Nội thất nằm gọn trong phòng, không đè tường; mỗi loại đều vẽ được trên 2D', () => {
+  const zone = (r) => {
+    const x = r.bounds.x < 48 ? 4 : 48;
+    const y = r.bounds.y < 50 ? 4 : 50;
+    return { x0: x, y0: y, x1: x === 4 ? 48 : 96, y1: y === 4 ? 50 : 96 };
+  };
+  FURNITURE.forEach((f) => {
+    const room = ROOMS.find((r) => r.id === f.room);
+    assert.ok(room, `phòng ${f.room}`);
+    const z = zone(room);
+    assert.ok(f.x >= z.x0 && f.y >= z.y0 && f.x + f.w <= z.x1 && f.y + f.h <= z.y1, `${f.type} trong ${f.room}`);
+    assert.ok(furnitureSvg([f]).includes('<rect') || furnitureSvg([f]).includes('<circle'), `vẽ được ${f.type}`);
+  });
+  ROOMS.forEach((r) => assert.ok(['wood', 'tile'].includes(FLOORS[r.id])));
 });
 
 console.log(`\n${passed} test passed.`);

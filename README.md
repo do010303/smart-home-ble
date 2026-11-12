@@ -13,7 +13,7 @@ Web app (cài được như ứng dụng điện thoại) cho hệ thống chi�
 | Màn hình | Nội dung |
 | --- | --- |
 | Trang chủ | Bật/tắt, độ sáng, màu cho từng đèn và cả phòng (1 gói group) |
-| Sơ đồ nhà | Mặt bằng 4 phòng, quầng sáng theo màu và độ sáng thật, bật/tắt ngay trên bản vẽ, công suất theo phòng |
+| Sơ đồ nhà | Mặt bằng 4 phòng có **nội thất** (giường, bếp, sofa, bàn làm việc…), phòng tối dần khi tắt đèn; **mô hình 3D** xoay được, mỗi đèn chiếu sáng thật theo màu và độ sáng; bật/tắt ngay trên bản vẽ, công suất theo phòng |
 | Thiết bị | **Quét** đèn mới (radar, cường độ tín hiệu), **thêm** vào phòng qua provisioning 7 bước, **nháy nhận diện**, **đổi tên / chuyển phòng / xoá** khỏi mạng; thử **Bluetooth thật** của máy qua Web Bluetooth |
 | Chi tiết đèn | Slider gradient 2700–6500 K, preset, PWM kênh ấm/lạnh, công suất, gói tin hex, nháy nhận diện |
 | Cảnh | 6 cảnh, gọi cho toàn nhà hoặc từng phòng (Scene Recall) |
@@ -29,9 +29,10 @@ Có 3 đường truyền để so sánh: **LAN** (gateway), **BLE** (GATT Proxy)
 
 1. Mở link dùng thử. Lần đầu sẽ có hộp hướng dẫn ngắn.
 2. **Trang chủ** → bấm một đèn → kéo thanh **Nhiệt độ màu** để thấy đèn đổi từ vàng ấm sang trắng.
-3. **Thiết bị** → **Bắt đầu quét** → bấm **Thêm** ở một đèn tìm thấy → đặt tên, chọn phòng → **Bắt đầu provisioning**.
-4. **Điều khiển thử** → chọn đích và lệnh → **Chạy thử** → xem độ trễ có đạt dưới 50 ms không.
-5. **Cài đặt** → đổi TTL xuống 2 để thấy các đèn ở xa 3 hop bị cảnh báo vượt tầm.
+3. **Sơ đồ nhà** → bấm **3D** → kéo để xoay căn hộ, click một đèn trên trần để bật/tắt.
+4. **Thiết bị** → **Bắt đầu quét** → bấm **Thêm** ở một đèn tìm thấy → đặt tên, chọn phòng → **Bắt đầu provisioning**.
+5. **Điều khiển thử** → chọn đích và lệnh → **Chạy thử** → xem độ trễ có đạt dưới 50 ms không.
+6. **Cài đặt** → đổi TTL xuống 2 để thấy các đèn ở xa 3 hop bị cảnh báo vượt tầm.
 
 Dữ liệu (đèn đã thêm, cài đặt) lưu trong trình duyệt của từng người — mỗi người mở link có một "ngôi nhà" riêng, không ảnh hưởng nhau.
 
@@ -59,7 +60,10 @@ smart-home-ble/
 │   ├── scanner.js    # lịch quét mô phỏng, cường độ tín hiệu, Web Bluetooth
 │   ├── testbench.js  # mã hoá lệnh cho màn hình Điều khiển thử
 │   ├── settings.js   # cài đặt mặc định, kiểm tra hợp lệ, sao lưu / khôi phục
+│   ├── vendor/three.module.min.js  # Three.js r160 (MIT) cho mô hình 3D
 │   └── ui/
+│       ├── furniture2d.js # nội thất & sàn trên sơ đồ 2D
+│       ├── floorplan3d.js # mô hình 3D căn hộ, đèn chiếu sáng thật
 │       ├── devices.js    # màn hình Thiết bị
 │       ├── testbench.js  # màn hình Điều khiển thử
 │       └── settings.js   # màn hình Cài đặt
@@ -129,7 +133,7 @@ Cần Node.js 18 trở lên.
 node tests/model_test.mjs
 ```
 
-28 test: màu & PWM, mã hoá gói tin (gồm Health Attention, Node Reset, Subscription Overwrite), độ trễ một chiều / khứ hồi, quét thiết bị, cài đặt và sao lưu, lệnh điều khiển thử, API.
+29 test: màu & PWM, mã hoá gói tin (gồm Health Attention, Node Reset, Subscription Overwrite), độ trễ một chiều / khứ hồi, quét thiết bị, cài đặt và sao lưu, lệnh điều khiển thử, API, vị trí nội thất.
 
 Test thủ công: `docs/TEST_CASES.md`.
 

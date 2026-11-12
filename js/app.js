@@ -12,8 +12,9 @@ import {
 } from './mesh.js';
 import {
   DEFAULT_FIRMWARE, DEFAULT_LIGHTS, DEFAULT_LIGHT_STATE, NEW_DEVICE_CANDIDATES, ROOMS, SCENES,
-  GATEWAY_FLOORPLAN_POS
+  GATEWAY_FLOORPLAN_POS, FLOORS, FURNITURE
 } from './data.js';
+import { FLOOR_PATTERNS, furnitureSvg } from './ui/furniture2d.js';
 import {
   API_CATALOG, apiCallHistory, buildCurl, executeApiRequest, registerGlobalApi
 } from './api.js';
@@ -58,7 +59,7 @@ const state = {
   appliedScene: null,
   provisionTarget: null,
   activeApiIndex: 0,
-  fpOptions: { glow: true, links: true, labels: true }
+  fpOptions: { glow: true, links: true, labels: true, mode: '2d' }
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -422,7 +423,11 @@ function setView(view) {
   $('#view-eyebrow').textContent = eyebrow;
   $('#view-title').textContent = title;
 
-  if (view === 'floorplan') { buildFloorplan(); renderFloorplanStats(); }
+  if (view === 'floorplan') {
+    buildFloorplan();
+    renderFloorplanStats();
+    if (state.fpOptions.mode === '3d') setFloorplanMode('3d', { quiet: true });
+  }
   if (view === 'scenes') updateScenes();
   if (view === 'mesh') { buildTopology(); renderMeshStats(); renderNodeTable(); }
   if (view === 'api') buildApiConsole();
@@ -634,9 +639,13 @@ function buildFloorplan() {
     </g>`;
 
   svg.innerHTML = `
-    <defs>${defs}</defs>
-    <!-- Nền và tường bao -->
+    <defs>${FLOOR_PATTERNS}${defs}</defs>
+    <!-- Nền, sàn từng phòng, nội thất -->
     <rect class="fp-bg" x="0" y="0" width="100" height="100" rx="3" />
+    ${ROOMS.map((r) => { const z = roomZone(r); return `<rect class="fp-floor" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" fill="url(#fp-${FLOORS[r.id] ?? 'wood'})" />`; }).join('')}
+    <g class="fp-furniture">${furnitureSvg(FURNITURE)}</g>
+    <!-- Phòng tối dần khi tắt đèn -->
+    ${ROOMS.map((r) => { const z = roomZone(r); return `<rect class="fp-shade" data-shade="${r.id}" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" />`; }).join('')}
     <rect class="fp-outer-wall" x="4" y="4" width="92" height="92" rx="2" />
     
     <!-- Tường ngăn phòng & Lối đi -->
@@ -660,7 +669,26 @@ function buildFloorplan() {
   updateFloorplan();
 }
 
+// Vùng sàn của phòng, kéo tới giữa tường ngăn.
+function roomZone(room) {
+  const x = room.bounds.x < 48 ? 4 : 48;
+  const y = room.bounds.y < 50 ? 4 : 50;
+  return { x, y, w: (x === 4 ? 48 : 96) - x, h: (y === 4 ? 50 : 96) - y };
+}
+
+// Độ sáng cảm nhận trung bình của phòng (0–1), dùng để làm tối phòng trên bản 2D.
+function roomBrightness(roomId) {
+  const lights = roomLights(roomId);
+  if (!lights.length) return 0;
+  return Math.min(1, (lights.reduce((s, l) => s + (l.on ? l.lightness / 100 : 0), 0) / lights.length) * 1.4);
+}
+
 function updateFloorplan() {
+  ROOMS.forEach((r) => {
+    const shade = $(`#floorplan-svg [data-shade="${r.id}"]`);
+    if (shade) shade.style.opacity = (0.62 * (1 - roomBrightness(r.id))).toFixed(2);
+  });
+  fp3d.api?.sync();
   state.lights.forEach((l) => {
     const hex = kelvinToHex(l.kelvin);
     const grad = $(`#fp-glow-${l.id}`);
@@ -687,6 +715,7 @@ function updateFloorplan() {
 }
 
 function flashFloorplan(targets) {
+  fp3d.api?.flash(targets);
   const svg = $('#floorplan-svg');
   if (!svg) return;
   const pulse = $('.fp-gw-pulse', svg);
@@ -781,10 +810,58 @@ function bindFloorplan() {
     updateFloorplan();
   });
 
+  $('#fp-mode').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-mode]');
+    if (b) setFloorplanMode(b.dataset.mode);
+  });
+  $('#fp3d-reset').addEventListener('click', () => fp3d.api?.resetView());
+  $('#fp3d-day').addEventListener('click', (e) => {
+    const day = e.currentTarget.getAttribute('aria-pressed') !== 'true';
+    e.currentTarget.setAttribute('aria-pressed', String(day));
+    e.currentTarget.textContent = day ? '🌙 Ban đêm' : '☀️ Ban ngày';
+    fp3d.api?.setDaylight(day);
+  });
+  setFloorplanMode(readStorage(FP_MODE_KEY) === '3d' ? '3d' : '2d', { quiet: true, lazy: true });
+
   $('#floorplan-rooms-summary').addEventListener('change', (e) => {
     const input = e.target.closest('[data-fp-room-toggle]');
     if (input) setRoom(input.dataset.fpRoomToggle, { on: input.checked });
   });
+}
+
+// ---------------------------------------------------------------- 2b. Mô hình 3D (tải khi cần)
+const FP_MODE_KEY = 'homemesh-fp-mode';
+const fp3d = { api: null, loading: null };
+
+function setFloorplanMode(mode, { quiet = false, lazy = false } = {}) {
+  state.fpOptions.mode = mode;
+  try { localStorage.setItem(FP_MODE_KEY, mode); } catch { /* bỏ qua */ }
+  $$('#fp-mode [data-mode]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === mode)));
+  const is3d = mode === '3d';
+  $('#floorplan-svg').hidden = is3d;
+  $('#fp3d').hidden = !is3d;
+  $('#fp-hint').textContent = is3d
+    ? '💡 Kéo để xoay, cuộn hoặc chụm 2 ngón để phóng to. Click vào đèn trên trần để bật/tắt, click đúp để chỉnh màu.'
+    : '💡 Click vào bóng đèn để bật/tắt, click đúp để mở bảng chỉnh nhiệt độ màu.';
+  if (!is3d) return;
+  if (fp3d.api) { fp3d.api.resize(); fp3d.api.sync(); return; }
+  if (lazy && state.view !== 'floorplan') return; // dựng khi mở màn hình Sơ đồ nhà
+  if (fp3d.loading) return;
+  $('#fp3d-loading').hidden = false;
+  fp3d.loading = import('./ui/floorplan3d.js')
+    .then((m) => m.mountFloorplan3D({
+      host: $('#fp3d'), state, lightById,
+      onToggle: (id) => { const l = lightById(id); if (l) setLight(id, { on: !l.on }); },
+      onOpen: openSheet
+    }))
+    .then((api) => { fp3d.api = api; })
+    .catch((err) => {
+      console.warn('3D không khả dụng', err);
+      fp3d.loading = null;
+      if (!quiet) toast('Máy này không dựng được 3D (WebGL) — quay về sơ đồ 2D');
+      setFloorplanMode('2d', { quiet: true });
+    })
+    .finally(() => { $('#fp3d-loading').hidden = true; });
 }
 
 // ---------------------------------------------------------------- 3. Device Sheet

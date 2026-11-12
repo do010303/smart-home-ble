@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.0 — 12/11/2026
+
+### Thêm
+- **Sơ đồ nhà 2D có nội thất:** giường, tủ, bếp, tủ lạnh, bàn ăn, sofa, TV, bàn làm việc, giá sách, cây; sàn gỗ và gạch. Phòng tối dần khi tắt đèn, sáng lại theo độ sáng thật.
+- **Mô hình 3D căn hộ** (nút 2D / 3D): mỗi đèn là một nguồn sáng thật, màu theo Kelvin, cường độ theo độ sáng tuyến tính của driver. Kéo để xoay, cuộn hoặc chụm 2 ngón để phóng to; click đèn để bật/tắt, click đúp để chỉnh màu; chế độ Ban ngày / Ban đêm. Three.js r160 để sẵn trong `js/vendor/`, chỉ tải khi mở 3D và vẫn chạy offline.
+
 ## 1.0.0 — 12/11/2026
 
 Bản hoàn thiện để nộp và chia sẻ online.
