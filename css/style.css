@@ -161,7 +161,7 @@ h2 { font-size: 16px; font-weight: 600; }
 .btn:hover { background: var(--surface-3); }
 .btn:disabled { opacity: 0.5; cursor: progress; }
 .btn-primary { background: var(--accent); color: var(--accent-ink); border-color: transparent; }
-.btn-primary:hover { filter: brightness(1.08); }
+.btn-primary:hover { background: var(--accent); filter: brightness(1.08); }
 .btn-danger { background: transparent; color: var(--bad); border-color: color-mix(in srgb, var(--bad) 45%, var(--border)); }
 .btn-danger:hover { background: color-mix(in srgb, var(--bad) 12%, transparent); }
 .btn:focus-visible, .chip:focus-visible, .nav-item:focus-visible, .segmented button:focus-visible { outline: 2px solid var(--link); outline-offset: 2px; }
@@ -836,3 +836,103 @@ select {
   .fp3d-label { font-size: 10px; }
 }
 #floorplan-svg .fp-fixture-label { paint-order: stroke; stroke: var(--surface); stroke-width: 0.7px; stroke-linejoin: round; }
+
+/* ---------- Nhà của tôi: sơ đồ + điều khiển theo phòng ---------- */
+.home-toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-bottom: 16px; }
+.summary-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+.summary-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 6px 12px; border-radius: 999px;
+  background: var(--surface); border: 1px solid var(--border); font-size: 13px; color: var(--muted);
+}
+.summary-chip b { color: var(--text); font-family: var(--mono); }
+.summary-chip.bad { color: var(--bad); }
+.home-grid { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.home-grid .floorplan-card { position: sticky; top: 16px; }
+.home-grid .floorplan-stage { min-height: 400px; }
+.floorplan-card .floorplan-options { margin-top: 12px; gap: 14px; }
+.floorplan-card .floorplan-options .switch-row { font-size: 12px; }
+#floorplan-svg .room-zone { cursor: pointer; }
+#floorplan-svg .room-zone:hover .room-tag-bg { stroke: var(--accent); }
+
+.room-panel-head { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; flex-wrap: wrap; margin-bottom: 10px; }
+#rooms { display: flex; flex-direction: column; gap: 12px; }
+.room-card {
+  background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius); padding: 14px 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.room-card.is-focus { border-color: var(--accent); box-shadow: 0 0 0 3px color-mix(in srgb, var(--accent) 25%, transparent); }
+.room-card-head { display: grid; grid-template-columns: 44px 1fr auto; gap: 12px; align-items: center; }
+.room-glow {
+  width: 44px; height: 44px; border-radius: 14px; display: grid; place-items: center; font-size: 20px;
+  background: color-mix(in srgb, var(--c, #555) calc(var(--g, 0) * 70%), var(--surface-2));
+  box-shadow: 0 0 calc(var(--g, 0) * 26px) calc(var(--g, 0) * 2px) color-mix(in srgb, var(--c, transparent) 70%, transparent);
+  transition: background 0.2s, box-shadow 0.2s;
+}
+.room-card.is-off .room-glow { background: var(--surface-2); box-shadow: none; filter: grayscale(0.6); }
+.room-card-title h3 { font-size: 16px; }
+.room-card-title small { color: var(--muted); font-size: 12px; }
+.preset-row { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; margin-top: 12px; }
+.preset {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px; padding: 8px 10px; min-width: 0;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2); text-align: left;
+  border-left: 4px solid var(--c);
+}
+.preset b { font-size: 13px; }
+.preset small { font-size: 11px; color: var(--muted); font-family: var(--mono); }
+.preset:hover { border-color: var(--c); }
+.preset.is-active { background: color-mix(in srgb, var(--c) 22%, var(--surface-2)); border-color: var(--c); }
+.room-sliders { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 14px; margin-top: 10px; }
+.slider { display: block; min-width: 0; }
+.room-card.is-off .room-sliders, .room-card.is-off .preset-row { opacity: 0.7; }
+.room-lights { margin-top: 6px; border-top: 1px solid var(--border); padding-top: 8px; }
+.room-lights summary { cursor: pointer; font-size: 13px; color: var(--muted); font-weight: 600; padding: 2px 0; }
+.room-lights summary:hover { color: var(--text); }
+.light-row { display: grid; grid-template-columns: 30px minmax(0, 1fr) minmax(70px, 120px) auto auto; gap: 10px; align-items: center; padding: 8px 0; }
+.light-row + .light-row { border-top: 1px dashed var(--border); }
+.light-row .bulb { width: 28px; height: 28px; }
+.light-row.is-off .bulb { background: var(--surface-3); box-shadow: none; }
+.light-row-info strong { display: block; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.light-row-info small { color: var(--muted); font-size: 11px; font-family: var(--mono); }
+.light-row .range.mini { margin: 0; }
+
+/* ---------- Cài đặt → Kỹ thuật viên ---------- */
+.tech-card { grid-column: 1 / -1; }
+.tech-card > summary { cursor: pointer; list-style: none; display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.tech-card > summary::-webkit-details-marker { display: none; }
+.tech-card > summary::after { content: '▾'; color: var(--muted); transition: transform 0.2s; }
+.tech-card[open] > summary::after { transform: rotate(180deg); }
+.tech-card > summary span { display: flex; flex-direction: column; gap: 2px; }
+.tech-card > summary small { font-size: 12px; }
+.tech-card h3 { font-size: 14px; margin: 18px 0 4px; }
+.tech-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 24px; }
+.tech-path { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.tech-check, .tech-tools { margin-top: 18px; padding-top: 4px; border-top: 1px solid var(--border); }
+.tech-check .card-head { margin: 14px 0 8px; }
+.tech-check .card-head h3 { margin: 0; }
+.check-list { list-style: none; padding: 0; margin: 0; display: flex; flex-direction: column; gap: 6px; }
+.check-list li { display: grid; grid-template-columns: 24px 1fr; gap: 10px; align-items: center; padding: 8px 10px; border-radius: var(--radius-sm); background: var(--surface-2); }
+.check-list li.muted { display: flex; gap: 8px; background: transparent; padding-left: 0; }
+.check-list b { display: block; font-size: 13px; }
+.check-list small { color: var(--muted); font-family: var(--mono); font-size: 12px; }
+.check-icon { width: 22px; height: 22px; border-radius: 50%; display: grid; place-items: center; font-size: 12px; font-weight: 700; }
+.check-list li.ok .check-icon { background: color-mix(in srgb, var(--ok) 22%, transparent); color: var(--ok); }
+.check-list li.bad .check-icon { background: color-mix(in srgb, var(--bad) 22%, transparent); color: var(--bad); }
+.tech-tools .more-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.more-item small { font-weight: 400; font-size: 11px; }
+
+@media (max-width: 1100px) {
+  .home-grid { grid-template-columns: minmax(0, 1fr); }
+  .home-grid .floorplan-card { position: static; }
+  .tech-tools .more-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}
+@media (max-width: 760px) {
+  .home-grid .floorplan-stage { min-height: 320px; }
+  .home-toolbar .floorplan-actions { width: 100%; }
+  .home-toolbar .floorplan-actions .btn { flex: 1; }
+  .room-sliders { grid-template-columns: minmax(0, 1fr); gap: 4px; }
+  .preset { padding: 7px 8px; }
+  .preset small { display: none; }
+  .light-row { grid-template-columns: 28px minmax(0, 1fr) auto auto; }
+  .light-row .range.mini { grid-column: 2 / -1; grid-row: 2; }
+  .tech-grid { grid-template-columns: minmax(0, 1fr); gap: 0; }
+}

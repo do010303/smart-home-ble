@@ -1,5 +1,18 @@
 # Changelog
 
+## 1.2.0 — 12/11/2026
+
+Tập trung vào người dùng: ít màn hình hơn, chỉnh đèn ngay trên một trang.
+
+### Thay đổi
+- **Nhà của tôi** gộp Trang chủ và Sơ đồ nhà: sơ đồ 2D/3D bên trái, điều khiển theo phòng bên phải. Mỗi phòng có công tắc, thanh độ sáng, thanh màu, 3 **kiểu sáng chọn nhanh** riêng (Phòng khách: Đón khách / Xem TV / Thư giãn; Bếp: Nấu ăn / Bữa tối ấm / Đêm khuya…) và danh sách đèn có thanh độ sáng riêng. Bấm tên phòng trên sơ đồ để nhảy tới phòng đó.
+- Thanh điều hướng còn 4 mục: Nhà của tôi, Cảnh, Thiết bị, Cài đặt. Điều khiển thử, Mạng Mesh, API Gateway, Nhật ký chuyển vào **Cài đặt → Kỹ thuật viên**, kèm cấu hình gateway, đường truyền, tham số mesh.
+- Thêm **Kiểm tra gateway**: địa chỉ API, MAC, REST API, số node trong tầm TTL, độ trễ tới đèn xa nhất. Thêm trường địa chỉ MAC gateway.
+- Bỏ menu "Thêm" trên điện thoại; link cũ `?view=floorplan` tự mở Nhà của tôi.
+
+### Sửa
+- Nút cam (nút chính) khi di chuột vào bị đổi nền xám, chữ trắng khó đọc.
+
 ## 1.1.0 — 12/11/2026
 
 ### Thêm

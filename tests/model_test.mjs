@@ -16,7 +16,7 @@ import { buildCommand, expectsStatus, paramsForIteration, statePatch } from '../
 import {
   encodeAttentionSet, encodeNodeReset, encodeSubscriptionOverwrite, encodeLightnessSet
 } from '../js/mesh.js';
-import { NEW_DEVICE_CANDIDATES, FURNITURE, FLOORS } from '../js/data.js';
+import { NEW_DEVICE_CANDIDATES, FURNITURE, FLOORS, ROOM_PRESETS } from '../js/data.js';
 import { furnitureSvg } from '../js/ui/furniture2d.js';
 
 let passed = 0;
@@ -291,6 +291,19 @@ test('Nội thất nằm gọn trong phòng, không đè tường; mỗi loại 
     assert.ok(furnitureSvg([f]).includes('<rect') || furnitureSvg([f]).includes('<circle'), `vẽ được ${f.type}`);
   });
   ROOMS.forEach((r) => assert.ok(['wood', 'tile'].includes(FLOORS[r.id])));
+});
+
+test('Kiểu sáng theo phòng: đủ 4 phòng, Kelvin/độ sáng trong dải đèn', () => {
+  ROOMS.forEach((r) => assert.ok(ROOM_PRESETS[r.id]?.length >= 3, `phòng ${r.id}`));
+  Object.values(ROOM_PRESETS).flat().forEach((p) => {
+    assert.equal(clampKelvin(p.kelvin), p.kelvin);
+    assert.ok(p.lightness >= 1 && p.lightness <= 100);
+  });
+});
+
+test('Cài đặt: MAC gateway hợp lệ được chuẩn hoá, MAC sai giữ mặc định', () => {
+  assert.equal(sanitizeSettings({ gatewayMac: 'a4-c1-38-5e-00-0f' }).gatewayMac, 'A4:C1:38:5E:00:0F');
+  assert.equal(sanitizeSettings({ gatewayMac: 'xx:yy' }).gatewayMac, DEFAULT_SETTINGS.gatewayMac);
 });
 
 console.log(`\n${passed} test passed.`);

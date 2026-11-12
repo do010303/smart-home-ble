@@ -12,13 +12,13 @@ import {
 } from './mesh.js';
 import {
   DEFAULT_FIRMWARE, DEFAULT_LIGHTS, DEFAULT_LIGHT_STATE, NEW_DEVICE_CANDIDATES, ROOMS, SCENES,
-  GATEWAY_FLOORPLAN_POS, FLOORS, FURNITURE
+  GATEWAY_FLOORPLAN_POS, FLOORS, FURNITURE, ROOM_PRESETS
 } from './data.js';
 import { FLOOR_PATTERNS, furnitureSvg } from './ui/furniture2d.js';
 import {
   API_CATALOG, apiCallHistory, buildCurl, executeApiRequest, registerGlobalApi
 } from './api.js';
-import { SETTINGS_KEY, gatewayBaseUrl, resolveTheme, sanitizeSettings } from './settings.js';
+import { MAC_RE, SETTINGS_KEY, gatewayBaseUrl, resolveTheme, sanitizeSettings } from './settings.js';
 import { mountDevices } from './ui/devices.js';
 import { mountTestbench } from './ui/testbench.js';
 import { mountSettings } from './ui/settings.js';
@@ -28,8 +28,7 @@ const THEME_KEY = 'homemesh_theme';
 const WELCOME_KEY = 'homemesh-welcome-seen';
 const GATEWAY_POS = { x: 50, y: 46 };
 const VIEW_TITLES = {
-  home: ['Nhà của tôi', 'Trang chủ'],
-  floorplan: ['Mặt bằng căn hộ', 'Sơ đồ nhà & Đèn'],
+  home: ['Nhà của tôi', 'Chiếu sáng'],
   devices: ['Quét & quản lý', 'Thiết bị'],
   scenes: ['Ngữ cảnh ánh sáng', 'Cảnh'],
   test: ['Gửi lệnh & đo độ trễ', 'Điều khiển thử'],
@@ -39,13 +38,15 @@ const VIEW_TITLES = {
   settings: ['Tuỳ chỉnh ứng dụng', 'Cài đặt']
 };
 const views = {};
+// Màn hình đo & gỡ lỗi: mở từ Cài đặt → Kỹ thuật viên, không có trên thanh điều hướng.
+const TECH_VIEWS = new Set(['test', 'mesh', 'api', 'log']);
+const openRooms = new Set(); // phòng đang mở danh sách đèn
 
 const nextTid = createTidCounter();
 const roomById = new Map(ROOMS.map((r) => [r.id, r]));
 
 const state = {
   view: 'home',
-  roomFilter: 'all',
   path: 'local',
   gatewayOnline: true,
   theme: 'dark',
@@ -59,7 +60,7 @@ const state = {
   appliedScene: null,
   provisionTarget: null,
   activeApiIndex: 0,
-  fpOptions: { glow: true, links: true, labels: true, mode: '2d' }
+  fpOptions: { glow: true, links: false, labels: true, mode: '2d' }
 };
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -200,7 +201,7 @@ function transmit({ bytes, dst, targets, record = true, animate = true, ack = fa
     if (state.view === 'log') renderLog();
   }
   if (animate && state.view === 'mesh') flashTopology(targets, path);
-  if (animate && state.view === 'floorplan') flashFloorplan(targets);
+  if (animate && state.view === 'home') flashFloorplan(targets);
   return { result, entry };
 }
 
@@ -359,7 +360,7 @@ function removeLight(id) {
 function rebuildAll() {
   save();
   buildHome();
-  if (state.view === 'floorplan') { buildFloorplan(); renderFloorplanStats(); }
+  if (state.view === 'home') buildFloorplan();
   if (state.view === 'mesh') { buildTopology(); renderNodeTable(); }
   views.devices?.render();
   views.testbench?.renderTargets();
@@ -407,7 +408,7 @@ function refresh() {
   save();
   updateHome();
   if (state.openLightId) updateSheet();
-  if (state.view === 'floorplan') { updateFloorplan(); renderFloorplanStats(); }
+  if (state.view === 'home') updateFloorplan();
   if (state.view === 'scenes') updateScenes();
   if (state.view === 'mesh') { updateTopology(); renderNodeTable(); }
   if (state.view === 'devices') views.devices?.render();
@@ -416,16 +417,19 @@ function refresh() {
 // ---------------------------------------------------------------- Top bar & navigation
 
 function setView(view) {
+  if (view === 'floorplan') view = 'home'; // link cũ ?view=floorplan
+  if (!(view in VIEW_TITLES)) view = 'home';
   state.view = view;
-  $$('.nav-item').forEach((b) => b.classList.toggle('is-active', b.dataset.view === view));
+  const navView = TECH_VIEWS.has(view) ? 'settings' : view;
+  $$('.nav-item').forEach((b) => b.classList.toggle('is-active', b.dataset.view === navView));
+  $('#back-settings').hidden = !TECH_VIEWS.has(view);
   $$('.view').forEach((v) => v.classList.toggle('is-active', v.id === `view-${view}`));
   const [eyebrow, title] = VIEW_TITLES[view] || ['HomeMesh', view];
   $('#view-eyebrow').textContent = eyebrow;
   $('#view-title').textContent = title;
 
-  if (view === 'floorplan') {
+  if (view === 'home') {
     buildFloorplan();
-    renderFloorplanStats();
     if (state.fpOptions.mode === '3d') setFloorplanMode('3d', { quiet: true });
   }
   if (view === 'scenes') updateScenes();
@@ -435,8 +439,6 @@ function setView(view) {
   if (view === 'devices') views.devices?.render();
   if (view === 'test') views.testbench?.render();
   if (view === 'settings') views.settings?.render();
-  $('#nav-more').classList.toggle('is-active', $(`.nav-secondary[data-view="${view}"]`) !== null);
-  if ($('#more-sheet').open) $('#more-sheet').close();
   paintIdentify();
   window.scrollTo({ top: 0 });
 }
@@ -463,46 +465,83 @@ function renderGateway() {
   $('#floorplan-svg .fp-gw')?.classList.toggle('offline', !state.gatewayOnline);
 }
 
-// ---------------------------------------------------------------- 1. Home View
+// ---------------------------------------------------------------- 1. Nhà của tôi: điều khiển theo phòng
+
+// Trạng thái gộp của một phòng: đèn đang bật, màu / độ sáng trung bình, công suất.
+function roomSummary(roomId) {
+  const lights = roomLights(roomId);
+  const onLights = lights.filter((l) => l.on);
+  const ref = onLights.length ? onLights : lights;
+  return {
+    lights,
+    onLights,
+    kelvin: ref.length ? Math.round(average(ref.map((l) => l.kelvin)) / 50) * 50 : DEFAULT_LIGHT_STATE.kelvin,
+    lightness: ref.length ? Math.round(average(ref.map((l) => l.lightness))) : DEFAULT_LIGHT_STATE.lightness,
+    watts: lights.reduce((sum, l) => sum + estimatePowerW(l.watts, l.on, l.lightness), 0)
+  };
+}
+
+// Kiểu sáng đang khớp với mọi đèn trong phòng (null nếu không khớp kiểu nào).
+function activePreset(roomId) {
+  const lights = roomLights(roomId);
+  if (!lights.length || lights.some((l) => !l.on)) return null;
+  return (ROOM_PRESETS[roomId] || []).find((p) => lights.every((l) => l.kelvin === p.kelvin && l.lightness === p.lightness))?.id ?? null;
+}
+
+function applyRoomPreset(roomId, presetId) {
+  const preset = (ROOM_PRESETS[roomId] || []).find((p) => p.id === presetId);
+  const room = roomById.get(roomId);
+  if (!preset || !room) return;
+  setRoom(roomId, { on: true, kelvin: preset.kelvin, lightness: preset.lightness });
+  toast(`${room.name}: ${preset.name} · ${preset.kelvin}K ${preset.lightness}%`);
+}
+
+// Làm nổi thẻ phòng khi bấm tên phòng trên sơ đồ.
+function focusRoom(roomId) {
+  const card = $(`#rooms .room-card[data-room="${roomId}"]`);
+  if (!card) return;
+  card.classList.add('is-focus');
+  card.scrollIntoView({ behavior: state.settings.animations ? 'smooth' : 'auto', block: 'nearest' });
+  setTimeout(() => card.classList.remove('is-focus'), 1400);
+}
 
 function buildHome() {
-  const filter = $('#room-filter');
-  filter.innerHTML = [{ id: 'all', name: 'Tất cả', icon: '🏠' }, ...ROOMS]
-    .map((r) => `<button type="button" role="tab" class="chip${state.roomFilter === r.id ? ' is-active' : ''}" data-room-filter="${r.id}">${r.icon} ${r.name}</button>`)
-    .join('');
-
-  const rooms = ROOMS.filter((r) => state.roomFilter === 'all' || r.id === state.roomFilter);
-  $('#rooms').innerHTML = rooms.map((room) => `
-    <section class="room" data-room="${room.id}">
-      <div class="room-head">
-        <div class="room-title">
-          <span aria-hidden="true">${room.icon}</span>
-          <h2>${room.name}</h2>
-          <small>group ${formatAddress(room.group)}</small>
-        </div>
-        <label class="switch-row" title="Bật/tắt cả phòng (1 gói tới group)">
-          <input type="checkbox" data-action="room-toggle" aria-label="Bật/tắt ${room.name}" /><span class="switch"></span>
-        </label>
-        <div class="room-group-controls">
-          <label>Độ sáng cả phòng <input type="range" class="range mini range-light" data-action="room-lightness" min="1" max="100" /></label>
-          <label>Màu cả phòng <input type="range" class="range mini range-cct" data-action="room-kelvin" min="${LED_SPEC.minK}" max="${LED_SPEC.maxK}" step="50" /></label>
-        </div>
+  $('#rooms').innerHTML = ROOMS.map((room) => {
+    const lights = roomLights(room.id);
+    const presets = ROOM_PRESETS[room.id] || [];
+    const body = lights.length ? `
+      <div class="preset-row" role="group" aria-label="Kiểu sáng ${room.name}">${presets.map((p) => `
+        <button type="button" class="preset" data-preset="${p.id}" style="--c:${kelvinToHex(p.kelvin)}">
+          <span aria-hidden="true">${p.icon}</span><b>${p.name}</b><small>${p.kelvin}K · ${p.lightness}%</small>
+        </button>`).join('')}
       </div>
-      <div class="device-grid">
-        ${roomLights(room.id).map((l) => `
-          <article class="device" data-light="${l.id}">
-            <button type="button" class="device-open" aria-label="Mở ${escapeHtml(l.name)}"></button>
-            <div class="device-top">
-              <span class="bulb" aria-hidden="true"></span>
-              <label class="switch-row"><input type="checkbox" data-action="light-toggle" aria-label="Bật/tắt ${escapeHtml(l.name)}" /><span class="switch"></span></label>
-            </div>
-            <div>
-              <div class="device-name">${escapeHtml(l.name)}</div>
-              <div class="device-meta"></div>
-            </div>
-          </article>`).join('') || '<p class="muted small">Phòng chưa có đèn. Vào <b>Thiết bị</b> để quét và thêm đèn.</p>'}
+      <div class="room-sliders">
+        <label class="slider"><span class="control-label"><span>Độ sáng</span><output data-out="lightness"></output></span>
+          <input type="range" class="range range-light" data-action="room-lightness" min="1" max="100" aria-label="Độ sáng ${room.name}" /></label>
+        <label class="slider"><span class="control-label"><span>Màu ánh sáng</span><output data-out="kelvin"></output></span>
+          <input type="range" class="range range-cct" data-action="room-kelvin" min="${LED_SPEC.minK}" max="${LED_SPEC.maxK}" step="50" aria-label="Màu ánh sáng ${room.name}" />
+          <span class="cct-ticks"><span>Vàng ấm</span><span>Trắng</span></span></label>
       </div>
-    </section>`).join('');
+      <details class="room-lights"${openRooms.has(room.id) ? ' open' : ''}>
+        <summary>${lights.length} đèn trong phòng</summary>
+        ${lights.map((l) => `
+        <div class="light-row" data-light="${l.id}">
+          <span class="bulb" aria-hidden="true"></span>
+          <div class="light-row-info"><strong>${escapeHtml(l.name)}</strong><small class="light-meta"></small></div>
+          <input type="range" class="range mini range-light" data-action="light-lightness" min="1" max="100" aria-label="Độ sáng ${escapeHtml(l.name)}" />
+          <label class="switch-row"><input type="checkbox" data-action="light-toggle" aria-label="Bật/tắt ${escapeHtml(l.name)}" /><span class="switch"></span></label>
+          <button type="button" class="btn small-btn" data-open="${l.id}">Chỉnh</button>
+        </div>`).join('')}
+      </details>` : '<p class="muted small">Phòng chưa có đèn. Vào <b>Thiết bị</b> để quét và thêm đèn.</p>';
+    return `
+    <article class="room-card" data-room="${room.id}">
+      <header class="room-card-head">
+        <span class="room-glow" aria-hidden="true">${room.icon}</span>
+        <div class="room-card-title"><h3>${room.name}</h3><small class="room-status"></small></div>
+        <label class="switch-row big" title="Bật/tắt cả phòng"><input type="checkbox" data-action="room-toggle" aria-label="Bật/tắt ${room.name}"${lights.length ? '' : ' disabled'} /><span class="switch"></span></label>
+      </header>${body}
+    </article>`;
+  }).join('');
 
   $$('#rooms .range-cct').forEach((el) => { el.style.background = cctGradient(); });
   updateHome();
@@ -510,60 +549,79 @@ function buildHome() {
 
 function updateHome() {
   const on = state.lights.filter((l) => l.on);
-  const watts = state.lights.reduce((s, l) => s + estimatePowerW(l.watts, l.on, l.lightness), 0);
-  const stats = latencyStats(state.samples, target());
+  const watts = state.lights.reduce((sum, l) => sum + estimatePowerW(l.watts, l.on, l.lightness), 0);
+  const litRooms = ROOMS.filter((r) => roomLights(r.id).some((l) => l.on)).length;
   $('#summary').innerHTML = `
-    <div class="card"><small>Đèn đang bật</small><b>${on.length}/${state.lights.length}</b></div>
-    <div class="card"><small>Công suất tổng (ước tính)</small><b>${watts.toFixed(1)} W</b></div>
-    <div class="card"><small>Độ trễ trung bình</small><b class="${stats.count ? latencyClass(stats.avg) : ''}">${stats.count ? stats.avg + ' ms' : '—'}</b></div>
-    <div class="card"><small>Gateway</small><b class="${state.gatewayOnline ? 'lat-ok' : 'lat-bad'}">${state.gatewayOnline ? 'Online' : 'Offline'}</b></div>`;
+    <span class="summary-chip"><b>${on.length}/${state.lights.length}</b> đèn đang bật</span>
+    <span class="summary-chip"><b>${litRooms}/${ROOMS.length}</b> phòng có sáng</span>
+    <span class="summary-chip"><b>${watts.toFixed(1)} W</b> đang dùng</span>
+    <span class="summary-chip${state.gatewayOnline ? '' : ' bad'}"><i class="dot${state.gatewayOnline ? '' : ' bad'}"></i>Gateway ${state.gatewayOnline ? 'online' : 'offline'}</span>`;
 
-  $$('#rooms .device').forEach((card) => {
-    const light = lightById(card.dataset.light);
-    if (!light) return;
-    card.classList.toggle('is-off', !light.on);
-    paintBulb($('.bulb', card), light);
-    $('[data-action="light-toggle"]', card).checked = light.on;
-    $('.device-meta', card).textContent = light.on ? `${light.kelvin}K · ${light.lightness}%` : `Tắt · ${light.watts}W`;
-  });
+  $$('#rooms .room-card').forEach((card) => {
+    const s = roomSummary(card.dataset.room);
+    if (!s.lights.length) return;
+    const hex = kelvinToHex(s.kelvin);
+    const lit = s.onLights.length > 0;
+    card.classList.toggle('is-off', !lit);
+    card.style.setProperty('--c', hex);
+    card.style.setProperty('--g', lit ? (0.15 + (s.lightness / 100) * 0.85).toFixed(2) : 0);
+    $('.room-status', card).textContent = lit
+      ? `${s.onLights.length}/${s.lights.length} đèn bật · ${s.watts.toFixed(1)} W`
+      : `Đang tắt · ${s.lights.length} đèn`;
+    $('[data-action="room-toggle"]', card).checked = lit;
 
-  $$('#rooms .room').forEach((section) => {
-    const lights = roomLights(section.dataset.room);
-    if (lights.length === 0) return;
-    const onLights = lights.filter((l) => l.on);
-    const ref = onLights.length ? onLights : lights;
-    const kelvin = Math.round(average(ref.map((l) => l.kelvin)) / 50) * 50;
-    const lightness = Math.round(average(ref.map((l) => l.lightness)));
-    $('[data-action="room-toggle"]', section).checked = onLights.length > 0;
-    const k = $('[data-action="room-kelvin"]', section);
-    const b = $('[data-action="room-lightness"]', section);
-    if (!isEditing(k)) k.value = kelvin;
-    if (!isEditing(b)) b.value = lightness;
-    k.style.setProperty('--thumb', kelvinToHex(kelvin));
-    b.style.background = `linear-gradient(90deg, #2a2f38, ${kelvinToHex(kelvin)})`;
+    const k = $('[data-action="room-kelvin"]', card);
+    const b = $('[data-action="room-lightness"]', card);
+    if (!isEditing(k)) k.value = s.kelvin;
+    if (!isEditing(b)) b.value = s.lightness;
+    k.style.setProperty('--thumb', kelvinToHex(Number(k.value)));
+    b.style.background = `linear-gradient(90deg, #2a2f38, ${hex})`;
+    $('[data-out="kelvin"]', card).textContent = `${k.value}K · ${kelvinLabel(Number(k.value))}`;
+    $('[data-out="lightness"]', card).textContent = `${b.value}%`;
+
+    const active = activePreset(card.dataset.room);
+    $$('[data-preset]', card).forEach((btn) => {
+      btn.classList.toggle('is-active', btn.dataset.preset === active);
+      btn.setAttribute('aria-pressed', String(btn.dataset.preset === active));
+    });
+
+    $$('.light-row', card).forEach((row) => {
+      const light = lightById(row.dataset.light);
+      if (!light) return;
+      row.classList.toggle('is-off', !light.on);
+      paintBulb($('.bulb', row), light);
+      $('[data-action="light-toggle"]', row).checked = light.on;
+      const r = $('[data-action="light-lightness"]', row);
+      if (!isEditing(r)) r.value = light.lightness;
+      r.style.background = `linear-gradient(90deg, #2a2f38, ${kelvinToHex(light.kelvin)})`;
+      $('.light-meta', row).textContent = light.on ? `${light.kelvin}K · ${light.lightness}%` : 'Đang tắt';
+    });
   });
 }
 
 function bindHome() {
-  $('#room-filter').addEventListener('click', (e) => {
-    const btn = e.target.closest('[data-room-filter]');
-    if (!btn) return;
-    state.roomFilter = btn.dataset.roomFilter;
-    buildHome();
-  });
-
   const rooms = $('#rooms');
   rooms.addEventListener('click', (e) => {
-    const open = e.target.closest('.device-open');
-    if (open) openSheet(open.closest('.device').dataset.light);
+    const open = e.target.closest('[data-open]');
+    if (open) { openSheet(open.dataset.open); return; }
+    const preset = e.target.closest('[data-preset]');
+    if (preset) applyRoomPreset(preset.closest('.room-card').dataset.room, preset.dataset.preset);
   });
+
+  // Nhớ phòng nào đang mở danh sách đèn (sự kiện toggle không nổi bọt → bắt ở pha capture).
+  rooms.addEventListener('toggle', (e) => {
+    const room = e.target.closest?.('.room-card')?.dataset.room;
+    if (!room) return;
+    if (e.target.open) openRooms.add(room); else openRooms.delete(room);
+  }, true);
 
   rooms.addEventListener('change', (e) => {
     const el = e.target;
-    const card = el.closest('.device');
-    const room = el.closest('.room')?.dataset.room;
+    const room = el.closest('.room-card')?.dataset.room;
+    const lightId = el.closest('.light-row')?.dataset.light;
     switch (el.dataset.action) {
-      case 'light-toggle': setLight(card.dataset.light, { on: el.checked }); break;
+      case 'light-toggle': setLight(lightId, { on: el.checked }); break;
+      case 'light-lightness': setLight(lightId, { on: true, lightness: Number(el.value) }); break;
       case 'room-toggle': setRoom(room, { on: el.checked }); break;
       case 'room-kelvin': setRoom(room, { on: true, kelvin: Number(el.value) }, { ack: true }); break;
       case 'room-lightness': setRoom(room, { on: true, lightness: Number(el.value) }, { ack: true }); break;
@@ -571,14 +629,25 @@ function bindHome() {
     }
   });
 
+  // Đang kéo: đổi giao diện ngay, gửi gói Unack theo nhịp throttleMs.
   rooms.addEventListener('input', (e) => {
     const el = e.target;
-    const room = el.closest('.room')?.dataset.room;
+    const value = Number(el.value);
+    if (el.dataset.action === 'light-lightness') {
+      const id = el.closest('.light-row').dataset.light;
+      Object.assign(lightById(id), { on: true, lightness: value });
+      updateHome();
+      if (state.view === 'home') updateFloorplan();
+      throttled(`light-${id}`, () => setLight(id, { on: true, lightness: value }, { ack: false }));
+      return;
+    }
     const key = el.dataset.action === 'room-kelvin' ? 'kelvin' : el.dataset.action === 'room-lightness' ? 'lightness' : null;
     if (!key) return;
-    roomLights(room).forEach((l) => { l[key] = Number(el.value); l.on = true; });
+    const room = el.closest('.room-card').dataset.room;
+    roomLights(room).forEach((l) => { l[key] = value; l.on = true; });
     updateHome();
-    throttled(`room-${room}`, () => setRoom(room, { on: true, [key]: Number(el.value) }, { ack: false }));
+    if (state.view === 'home') updateFloorplan();
+    throttled(`room-${room}`, () => setRoom(room, { on: true, [key]: value }, { ack: false }));
   });
 }
 
@@ -733,46 +802,14 @@ function flashFloorplan(targets) {
   });
 }
 
-function renderFloorplanStats() {
-  const onLights = state.lights.filter((l) => l.on);
-  const totalWatts = state.lights.reduce((s, l) => s + estimatePowerW(l.watts, l.on, l.lightness), 0);
-  const activeRooms = ROOMS.filter((r) => roomLights(r.id).some((l) => l.on));
-
-  $('#fp-total-status').textContent = `${onLights.length}/${state.lights.length} đèn sáng`;
-  $('#floorplan-stats').innerHTML = `
-    <div class="stat"><small>Đèn đang bật</small><b>${onLights.length} / ${state.lights.length}</b></div>
-    <div class="stat ok"><small>Công suất tức thời</small><b>${totalWatts.toFixed(1)} W</b></div>
-    <div class="stat"><small>Phòng có sáng</small><b>${activeRooms.length} / ${ROOMS.length}</b></div>
-  `;
-
-  $('#floorplan-rooms-summary').innerHTML = ROOMS.map((r) => {
-    const lights = roomLights(r.id);
-    const onCount = lights.filter((l) => l.on).length;
-    const roomWatts = lights.reduce((s, l) => s + estimatePowerW(l.watts, l.on, l.lightness), 0);
-    return `
-      <div class="fp-room-item">
-        <div class="fp-room-info">
-          <span>${r.icon}</span>
-          <div>
-            <strong>${r.name}</strong>
-            <small>${lights.length} đèn · ${r.area} m²</small>
-          </div>
-        </div>
-        <div class="fp-room-stats">
-          <b>${onCount > 0 ? `${roomWatts.toFixed(1)} W` : 'Tắt'}</b>
-          <small>${onCount}/${lights.length} đèn</small>
-        </div>
-        <label class="switch-row" title="Bật/tắt ${r.name}">
-          <input type="checkbox" data-fp-room-toggle="${r.id}" ${onCount > 0 ? 'checked' : ''} /><span class="switch"></span>
-        </label>
-      </div>`;
-  }).join('');
-}
-
 function bindFloorplan() {
   $('#floorplan-svg').addEventListener('click', (e) => {
     const fixture = e.target.closest('[data-fp-light]');
-    if (!fixture) return;
+    if (!fixture) {
+      const zone = e.target.closest('[data-fp-room]');
+      if (zone) focusRoom(zone.dataset.fpRoom);
+      return;
+    }
     const lightId = fixture.dataset.fpLight;
     const light = lightById(lightId);
     if (!light) return;
@@ -823,10 +860,6 @@ function bindFloorplan() {
   });
   setFloorplanMode(readStorage(FP_MODE_KEY) === '3d' ? '3d' : '2d', { quiet: true, lazy: true });
 
-  $('#floorplan-rooms-summary').addEventListener('change', (e) => {
-    const input = e.target.closest('[data-fp-room-toggle]');
-    if (input) setRoom(input.dataset.fpRoomToggle, { on: input.checked });
-  });
 }
 
 // ---------------------------------------------------------------- 2b. Mô hình 3D (tải khi cần)
@@ -841,11 +874,11 @@ function setFloorplanMode(mode, { quiet = false, lazy = false } = {}) {
   $('#floorplan-svg').hidden = is3d;
   $('#fp3d').hidden = !is3d;
   $('#fp-hint').textContent = is3d
-    ? '💡 Kéo để xoay, cuộn hoặc chụm 2 ngón để phóng to. Click vào đèn trên trần để bật/tắt, click đúp để chỉnh màu.'
-    : '💡 Click vào bóng đèn để bật/tắt, click đúp để mở bảng chỉnh nhiệt độ màu.';
+    ? '💡 Kéo để xoay, cuộn hoặc chụm 2 ngón để phóng to. Bấm đèn trên trần để bật/tắt, bấm đúp để chỉnh màu.'
+    : '💡 Bấm vào đèn để bật/tắt, bấm tên phòng để chỉnh cả phòng.';
   if (!is3d) return;
   if (fp3d.api) { fp3d.api.resize(); fp3d.api.sync(); return; }
-  if (lazy && state.view !== 'floorplan') return; // dựng khi mở màn hình Sơ đồ nhà
+  if (lazy && state.view !== 'home') return; // dựng khi mở màn hình Nhà của tôi
   if (fp3d.loading) return;
   $('#fp3d-loading').hidden = false;
   fp3d.loading = import('./ui/floorplan3d.js')
@@ -862,6 +895,34 @@ function setFloorplanMode(mode, { quiet = false, lazy = false } = {}) {
       setFloorplanMode('2d', { quiet: true });
     })
     .finally(() => { $('#fp3d-loading').hidden = true; });
+}
+
+// ---------------------------------------------------------------- Kiểm tra gateway (Kỹ thuật viên)
+
+// Trả danh sách { ok, label, detail } để màn hình Cài đặt hiển thị.
+function checkGateway() {
+  const s = state.settings;
+  const checks = [
+    { ok: true, label: 'Địa chỉ API', detail: `${gatewayBaseUrl(s)}/api/v1` },
+    { ok: MAC_RE.test(s.gatewayMac), label: 'Địa chỉ MAC gateway', detail: s.gatewayMac }
+  ];
+  const api = executeApiRequest({ method: 'GET', path: '/api/v1/lights', context: apiContext() });
+  checks.push({
+    ok: state.gatewayOnline && api.status === 200,
+    label: 'REST API · GET /api/v1/lights',
+    detail: state.gatewayOnline ? `${api.status} ${api.statusText} · ${api.timeMs} ms · ${api.body?.count ?? 0} đèn` : 'Gateway offline — app đang đi qua BLE GATT Proxy'
+  });
+  const far = state.lights.filter((l) => l.hops > s.ttl).length;
+  checks.push({ ok: far === 0, label: 'Node BLE Mesh trong tầm', detail: `${state.lights.length - far}/${state.lights.length} node trong TTL ${s.ttl}` });
+  if (state.lights.length) {
+    const { result } = transmit({ bytes: encodeOnOffGet(), dst: ADDRESS.GROUP_ALL_LIGHTS, targets: state.lights, ack: true, animate: false });
+    checks.push({
+      ok: result.oneWay < target(),
+      label: 'Độ trễ tới đèn xa nhất',
+      detail: `${result.oneWay} ms một chiều · ${result.total} ms khứ hồi (mục tiêu < ${target()} ms)`
+    });
+  }
+  return checks;
 }
 
 // ---------------------------------------------------------------- 3. Device Sheet
@@ -1511,7 +1572,7 @@ function resetAll() {
 function context() {
   return {
     state, $, $$, toast, escapeHtml, target, transmit, nextTid,
-    lightById, roomLights, roomById, setLight, setRoom, recallScene,
+    lightById, roomLights, roomById, setLight, setRoom, recallScene, checkGateway,
     identifyLight, paintIdentify, renameLight, moveLight, removeLight, openProvisioning,
     refresh, rebuildAll, replaceLights, resetAll, clearMetrics, updateSettings,
     confirmAsk, copyText, downloadJson, latencyClass, effectivePath, showWelcome
@@ -1524,8 +1585,7 @@ function showWelcome() {
 
 function bindShell() {
   $$('.nav-item[data-view], .more-item').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
-  $('#nav-more').addEventListener('click', () => $('#more-sheet').showModal());
-  $('#more-sheet').addEventListener('click', (e) => { if (e.target === e.currentTarget) e.currentTarget.close(); });
+  $('#back-settings').addEventListener('click', () => setView('settings'));
   $('#theme-toggle').addEventListener('click', toggleTheme);
   darkQuery?.addEventListener?.('change', () => { if (state.settings.theme === 'system') applyTheme(); });
 
@@ -1574,7 +1634,7 @@ function init() {
   renderGateway();
 
   const params = new URLSearchParams(location.search);
-  if (params.get('view') in VIEW_TITLES) setView(params.get('view'));
+  setView(params.get('view') || 'home');
   if (!readStorage(WELCOME_KEY) && !params.has('nowelcome')) showWelcome();
 
   if ('serviceWorker' in navigator && window.isSecureContext) {

@@ -2,7 +2,7 @@
 
 import { LOAD_PROFILES, PATHS } from './mesh.js';
 
-export const APP_VERSION = '1.1.0';
+export const APP_VERSION = '1.2.0';
 export const SETTINGS_KEY = 'homemesh-settings-v1';
 export const BACKUP_FORMAT = 'homemesh-backup';
 
@@ -11,6 +11,7 @@ export const DEFAULT_SETTINGS = Object.freeze({
   gatewayName: 'GW-01',
   gatewayHost: '192.168.1.100',
   gatewayPort: 8080,
+  gatewayMac: 'A4:C1:38:5E:00:01',
   defaultPath: 'local',
   autoFallback: true,         // Gateway offline → tự chuyển BLE Proxy
   targetLatencyMs: 50,
@@ -32,6 +33,7 @@ export const SETTING_RANGES = Object.freeze({
 
 const THEMES = ['system', 'dark', 'light'];
 const HOST_RE = /^[a-zA-Z0-9.-]{1,253}$/;
+export const MAC_RE = /^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i;
 
 const clampInt = (value, [min, max], fallback) => {
   const n = Math.round(Number(value));
@@ -47,6 +49,7 @@ export function sanitizeSettings(raw) {
   if (THEMES.includes(src.theme)) out.theme = src.theme;
   if (typeof src.gatewayName === 'string' && src.gatewayName.trim()) out.gatewayName = src.gatewayName.trim().slice(0, 32);
   if (typeof src.gatewayHost === 'string' && HOST_RE.test(src.gatewayHost.trim())) out.gatewayHost = src.gatewayHost.trim();
+  if (typeof src.gatewayMac === 'string' && MAC_RE.test(src.gatewayMac.trim())) out.gatewayMac = src.gatewayMac.trim().toUpperCase().replace(/-/g, ':');
   if (src.defaultPath in PATHS) out.defaultPath = src.defaultPath;
   if (src.loadProfile in LOAD_PROFILES) out.loadProfile = src.loadProfile;
   if (typeof src.autoFallback === 'boolean') out.autoFallback = src.autoFallback;

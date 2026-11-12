@@ -88,6 +88,22 @@ export function mountSettings(ctx) {
   $('#btn-share').addEventListener('click', () => ctx.copyText(location.origin + location.pathname, 'Đã sao chép link — gửi cho người khác để mở demo'));
   $('#btn-show-welcome').addEventListener('click', ctx.showWelcome);
 
+  // Kỹ thuật viên: kiểm tra địa chỉ, MAC, REST API và các node mesh.
+  $('#btn-check-gateway').addEventListener('click', async (e) => {
+    const btn = e.currentTarget;
+    const list = $('#check-list');
+    btn.disabled = true;
+    list.innerHTML = '<li class="muted small"><span class="spinner" aria-hidden="true"></span>Đang kiểm tra gateway…</li>';
+    await new Promise((r) => setTimeout(r, 450));
+    const checks = ctx.checkGateway();
+    list.innerHTML = checks.map((c) => `<li class="${c.ok ? 'ok' : 'bad'}">
+      <span class="check-icon" aria-hidden="true">${c.ok ? '✓' : '!'}</span>
+      <div><b>${ctx.escapeHtml(c.label)}</b><small>${ctx.escapeHtml(c.detail)}</small></div></li>`).join('');
+    const failed = checks.filter((c) => !c.ok).length;
+    ctx.toast(failed ? `Kiểm tra xong: ${failed} mục cần xem lại` : 'Gateway hoạt động bình thường');
+    btn.disabled = false;
+  });
+
   window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
     installPrompt = e;

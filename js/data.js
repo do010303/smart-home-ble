@@ -118,3 +118,27 @@ export const FURNITURE = Object.freeze([
   { room: 'office', type: 'armchair', x: 56, y: 85, w: 9, h: 9, side: 'left' },
   { room: 'office', type: 'plant', x: 52, y: 61, w: 5, h: 5 }
 ]);
+
+// Kiểu sáng chọn nhanh cho từng phòng: 1 chạm = 1 gói Light CTL Set tới group của phòng.
+export const ROOM_PRESETS = Object.freeze({
+  living: [
+    { id: 'guests', name: 'Đón khách', icon: '✨', kelvin: 5000, lightness: 100 },
+    { id: 'tv', name: 'Xem TV', icon: '📺', kelvin: 3000, lightness: 25 },
+    { id: 'relax', name: 'Thư giãn', icon: '🛋️', kelvin: 2700, lightness: 45 }
+  ],
+  bedroom: [
+    { id: 'read', name: 'Đọc sách', icon: '📖', kelvin: 4000, lightness: 75 },
+    { id: 'night', name: 'Ngủ ngon', icon: '🌙', kelvin: 2700, lightness: 8 },
+    { id: 'wake', name: 'Thức dậy', icon: '☀️', kelvin: 5000, lightness: 85 }
+  ],
+  kitchen: [
+    { id: 'cook', name: 'Nấu ăn', icon: '🍳', kelvin: 5000, lightness: 100 },
+    { id: 'dinner', name: 'Bữa tối ấm', icon: '🍽️', kelvin: 3000, lightness: 55 },
+    { id: 'late', name: 'Đêm khuya', icon: '🌙', kelvin: 2700, lightness: 20 }
+  ],
+  office: [
+    { id: 'focus', name: 'Tập trung', icon: '⚡', kelvin: 6500, lightness: 100 },
+    { id: 'meeting', name: 'Họp online', icon: '🎥', kelvin: 4500, lightness: 85 },
+    { id: 'break', name: 'Nghỉ ngơi', icon: '☕', kelvin: 3000, lightness: 40 }
+  ]
+});

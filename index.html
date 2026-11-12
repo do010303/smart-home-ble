@@ -31,17 +31,10 @@
           <small>BLE Mesh Lighting</small>
         </div>
       </div>
-      <button class="nav-item is-active" data-view="home" type="button"><span aria-hidden="true">⌂</span><span>Trang chủ</span></button>
-      <button class="nav-item" data-view="floorplan" type="button"><span aria-hidden="true">▦</span><span>Sơ đồ nhà</span></button>
-      <button class="nav-item" data-view="devices" type="button"><span aria-hidden="true">◎</span><span>Thiết bị</span></button>
+      <button class="nav-item is-active" data-view="home" type="button"><span aria-hidden="true">⌂</span><span>Nhà của tôi</span></button>
       <button class="nav-item" data-view="scenes" type="button"><span aria-hidden="true">✦</span><span>Cảnh</span></button>
-      <p class="nav-group">Kỹ thuật</p>
-      <button class="nav-item nav-secondary" data-view="test" type="button"><span aria-hidden="true">▷</span><span>Điều khiển thử</span></button>
-      <button class="nav-item nav-secondary" data-view="mesh" type="button"><span aria-hidden="true">⬡</span><span>Mạng Mesh</span></button>
-      <button class="nav-item nav-secondary" data-view="api" type="button"><span aria-hidden="true">{}</span><span>API Gateway</span></button>
-      <button class="nav-item nav-secondary" data-view="log" type="button"><span aria-hidden="true">≡</span><span>Nhật ký</span></button>
-      <button class="nav-item nav-secondary" data-view="settings" type="button"><span aria-hidden="true">⚙</span><span>Cài đặt</span></button>
-      <button class="nav-item nav-more" id="nav-more" type="button" aria-haspopup="dialog"><span aria-hidden="true">⋯</span><span>Thêm</span></button>
+      <button class="nav-item" data-view="devices" type="button"><span aria-hidden="true">◎</span><span>Thiết bị</span></button>
+      <button class="nav-item" data-view="settings" type="button"><span aria-hidden="true">⚙</span><span>Cài đặt</span></button>
 
       <div class="nav-gateway" id="nav-gateway">
         <span class="dot"></span>
@@ -65,33 +58,14 @@
             <span id="theme-icon">🌙</span> <span id="theme-text">Tối</span>
           </button>
 
-          <!-- Bộ chọn đường truyền -->
-          <div class="segmented" role="radiogroup" aria-label="Đường truyền lệnh" id="path-control">
-            <button type="button" role="radio" data-path="local">LAN</button>
-            <button type="button" role="radio" data-path="proxy">BLE</button>
-            <button type="button" role="radio" data-path="cloud">Cloud</button>
-          </div>
-          <div class="latency-pill" id="latency-pill" title="Độ trễ lệnh gần nhất (mục tiêu < 50 ms)">
-            <span class="dot"></span><span id="latency-pill-text">— ms</span>
-          </div>
+          <button type="button" class="btn btn-ghost" id="back-settings" hidden>← Cài đặt</button>
         </div>
       </header>
 
-      <!-- 1. TRANG CHỦ -->
+      <!-- 1. NHÀ CỦA TÔI: sơ đồ nhà + điều khiển theo phòng -->
       <section class="view is-active" id="view-home" aria-labelledby="view-title">
-        <div class="summary" id="summary"></div>
-        <div class="chips" id="room-filter" role="tablist" aria-label="Lọc theo phòng"></div>
-        <div id="rooms"></div>
-      </section>
-
-      <!-- 2. SƠ ĐỒ MẶT BẰNG NHÀ (HOUSE FLOORPLAN) -->
-      <section class="view" id="view-floorplan">
-        <div class="floorplan-toolbar">
-          <div class="floorplan-options">
-            <label class="switch-row"><input type="checkbox" id="fp-glow" checked /><span class="switch" aria-hidden="true"></span>Quầng sáng CCT</label>
-            <label class="switch-row"><input type="checkbox" id="fp-links" checked /><span class="switch" aria-hidden="true"></span>Đường truyền Mesh</label>
-            <label class="switch-row"><input type="checkbox" id="fp-labels" checked /><span class="switch" aria-hidden="true"></span>Tên &amp; Công suất</label>
-          </div>
+        <div class="home-toolbar">
+          <div class="summary-chips" id="summary" aria-live="polite"></div>
           <div class="floorplan-actions">
             <button class="btn" id="fp-all-on" type="button">Bật toàn nhà</button>
             <button class="btn btn-ghost" id="fp-all-off" type="button">Tắt toàn nhà</button>
@@ -99,18 +73,13 @@
           </div>
         </div>
 
-        <div class="floorplan-grid">
+        <div class="home-grid">
           <div class="card floorplan-card">
             <div class="card-head">
-              <h2>Mặt bằng căn hộ &amp; Vị trí đèn</h2>
+              <h2>Căn hộ</h2>
               <div class="segmented" role="radiogroup" aria-label="Kiểu xem" id="fp-mode">
                 <button type="button" role="radio" data-mode="2d" aria-checked="true">2D</button>
                 <button type="button" role="radio" data-mode="3d" aria-checked="false">3D</button>
-              </div>
-              <div class="legend">
-                <span><i class="lg lg-gw"></i>Gateway</span>
-                <span><i class="lg lg-relay"></i>Đèn Relay</span>
-                <span><i class="lg lg-node"></i>Đèn thường</span>
               </div>
             </div>
             <!-- SVG Bản vẽ nhà -->
@@ -126,23 +95,20 @@
                 <div class="fp3d-loading" id="fp3d-loading"><span class="spinner" aria-hidden="true"></span>Đang dựng mô hình 3D…</div>
               </div>
             </div>
-            <p class="floorplan-hint muted small" id="fp-hint">💡 Click vào bóng đèn để bật/tắt, click đúp để mở bảng chỉnh nhiệt độ màu.</p>
+                        <div class="floorplan-options">
+              <label class="switch-row"><input type="checkbox" id="fp-glow" checked /><span class="switch" aria-hidden="true"></span>Quầng sáng</label>
+              <label class="switch-row"><input type="checkbox" id="fp-labels" checked /><span class="switch" aria-hidden="true"></span>Tên &amp; công suất</label>
+              <label class="switch-row"><input type="checkbox" id="fp-links" /><span class="switch" aria-hidden="true"></span>Đường mesh</label>
+            </div>
+            <p class="floorplan-hint muted small" id="fp-hint">💡 Bấm vào đèn để bật/tắt, bấm tên phòng để chỉnh cả phòng.</p>
           </div>
 
-          <!-- Bảng phân tích mặt bằng -->
-          <div class="floorplan-sidebar">
-            <div class="card">
-              <div class="card-head">
-                <h2>Kết quả phân tích toàn nhà</h2>
-                <span class="tag" id="fp-total-status">Toàn nhà</span>
-              </div>
-              <div class="stats" id="floorplan-stats"></div>
+          <div class="room-panel">
+            <div class="room-panel-head">
+              <h2>Chiếu sáng theo phòng</h2>
+              <span class="muted small">Chọn kiểu sáng có sẵn hoặc kéo thanh để chỉnh</span>
             </div>
-
-            <div class="card">
-              <div class="card-head"><h2>Chiếu sáng theo phòng</h2></div>
-              <div class="floorplan-rooms-list" id="floorplan-rooms-summary"></div>
-            </div>
+            <div id="rooms"></div>
           </div>
         </div>
       </section>
@@ -466,42 +432,7 @@
             <label class="switch-row"><input type="checkbox" data-setting="animations" /><span class="switch" aria-hidden="true"></span>Hiệu ứng chuyển động</label>
           </div>
 
-          <div class="card">
-            <div class="card-head"><h2>Gateway</h2></div>
-            <label class="field">Tên gateway <input type="text" data-setting="gatewayName" maxlength="32" /></label>
-            <div class="field-row">
-              <label class="field">Địa chỉ IP / host <input type="text" data-setting="gatewayHost" inputmode="url" /></label>
-              <label class="field">Cổng <input type="number" data-setting="gatewayPort" min="1" max="65535" /></label>
-            </div>
-            <label class="field">Đường truyền mặc định
-              <select data-setting="defaultPath">
-                <option value="local">LAN → Gateway</option>
-                <option value="proxy">BLE GATT Proxy</option>
-                <option value="cloud">Cloud MQTT</option>
-              </select>
-            </label>
-            <p class="small muted">Địa chỉ gateway dùng trong lệnh cURL ở màn hình API và khi nối gateway thật.</p>
-          </div>
 
-          <div class="card">
-            <div class="card-head"><h2>Mạng BLE Mesh</h2></div>
-            <div class="field-row">
-              <label class="field">TTL mặc định <input type="number" data-setting="ttl" min="2" max="7" /></label>
-              <label class="field">Mục tiêu độ trễ (ms) <input type="number" data-setting="targetLatencyMs" min="10" max="500" /></label>
-            </div>
-            <div class="field-row">
-              <label class="field">Nhịp gửi khi kéo slider (ms) <input type="number" data-setting="throttleMs" min="20" max="500" step="10" /></label>
-              <label class="field">Thời gian nháy nhận diện (s) <input type="number" data-setting="attentionSeconds" min="1" max="30" /></label>
-            </div>
-            <label class="field">Môi trường mô phỏng
-              <select data-setting="loadProfile">
-                <option value="ideal">Lý tưởng (phòng thí nghiệm)</option>
-                <option value="normal">Bình thường (nhà ở)</option>
-                <option value="busy">Nhiễu cao (nhiều Wi-Fi/BLE)</option>
-              </select>
-            </label>
-            <p class="small muted" id="ttl-hint"></p>
-          </div>
 
           <div class="card">
             <div class="card-head"><h2>Dữ liệu</h2></div>
@@ -528,6 +459,79 @@
             <p class="small muted" id="install-hint"></p>
             <p class="small"><a href="https://github.com/do010303/smart-home-ble" target="_blank" rel="noopener">Mã nguồn trên GitHub</a></p>
           </div>
+          <details class="card tech-card" id="tech-card">
+            <summary>
+              <span><b>Kỹ thuật viên</b><small class="muted">Gateway, mạng BLE Mesh, kiểm tra kết nối và công cụ đo — người dùng không cần chỉnh</small></span>
+            </summary>
+            <div class="tech-grid">
+              <div>
+                <h3>Gateway</h3>
+                <label class="field">Tên gateway <input type="text" data-setting="gatewayName" maxlength="32" /></label>
+                <div class="field-row">
+                  <label class="field">Địa chỉ IP / host <input type="text" data-setting="gatewayHost" inputmode="url" /></label>
+                  <label class="field">Cổng <input type="number" data-setting="gatewayPort" min="1" max="65535" /></label>
+                </div>
+                <label class="field">Địa chỉ MAC <input type="text" data-setting="gatewayMac" maxlength="17" placeholder="A4:C1:38:5E:00:01" /></label>
+                <label class="field">Đường truyền mặc định
+                  <select data-setting="defaultPath">
+                    <option value="local">LAN → Gateway</option>
+                    <option value="proxy">BLE GATT Proxy</option>
+                    <option value="cloud">Cloud MQTT</option>
+                  </select>
+                </label>
+                <div class="field">
+                  <span>Đường truyền đang dùng</span>
+                  <div class="tech-path">
+                  <div class="segmented" role="radiogroup" aria-label="Đường truyền lệnh" id="path-control">
+                  <button type="button" role="radio" data-path="local">LAN</button>
+                  <button type="button" role="radio" data-path="proxy">BLE</button>
+                  <button type="button" role="radio" data-path="cloud">Cloud</button>
+                  </div>
+                  <div class="latency-pill" id="latency-pill" title="Độ trễ lệnh gần nhất (mục tiêu < 50 ms)">
+                  <span class="dot"></span><span id="latency-pill-text">— ms</span>
+                  </div>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <h3>Mạng BLE Mesh</h3>
+                <div class="field-row">
+                  <label class="field">TTL mặc định <input type="number" data-setting="ttl" min="2" max="7" /></label>
+                  <label class="field">Mục tiêu độ trễ (ms) <input type="number" data-setting="targetLatencyMs" min="10" max="500" /></label>
+                </div>
+                <div class="field-row">
+                  <label class="field">Nhịp gửi khi kéo (ms) <input type="number" data-setting="throttleMs" min="20" max="500" step="10" /></label>
+                  <label class="field">Thời gian nháy (s) <input type="number" data-setting="attentionSeconds" min="1" max="30" /></label>
+                </div>
+                <label class="field">Môi trường mô phỏng
+                  <select data-setting="loadProfile">
+                    <option value="ideal">Lý tưởng (phòng thí nghiệm)</option>
+                    <option value="normal">Bình thường (nhà ở)</option>
+                    <option value="busy">Nhiễu cao (nhiều Wi-Fi/BLE)</option>
+                  </select>
+                </label>
+                <p class="small muted" id="ttl-hint"></p>
+              </div>
+            </div>
+
+            <div class="tech-check">
+              <div class="card-head">
+                <h3>Kiểm tra gateway</h3>
+                <button class="btn btn-primary" id="btn-check-gateway" type="button">Kiểm tra MAC &amp; API</button>
+              </div>
+              <ul class="check-list" id="check-list"><li class="muted small">Bấm “Kiểm tra” để thử địa chỉ, MAC, REST API và các node trong mạng.</li></ul>
+            </div>
+
+            <div class="tech-tools">
+              <h3>Công cụ đo &amp; gỡ lỗi</h3>
+              <div class="more-grid">
+                <button type="button" class="more-item" data-view="test"><span aria-hidden="true">▷</span>Điều khiển thử<small class="muted">Gửi lệnh lặp, đo độ trễ</small></button>
+                <button type="button" class="more-item" data-view="mesh"><span aria-hidden="true">⬡</span>Mạng Mesh<small class="muted">Topology, jitter, stress test</small></button>
+                <button type="button" class="more-item" data-view="api"><span aria-hidden="true">{}</span>API Gateway<small class="muted">Thử REST API, cURL</small></button>
+                <button type="button" class="more-item" data-view="log"><span aria-hidden="true">≡</span>Nhật ký gói tin<small class="muted">Opcode, payload, TTL</small></button>
+              </div>
+            </div>
+          </details>
         </form>
       </section>
     </main>
@@ -631,20 +635,6 @@
     </div>
   </dialog>
 
-  <!-- MODAL: MENU THÊM (MOBILE) -->
-  <dialog class="sheet" id="more-sheet" aria-label="Các màn hình khác">
-    <form method="dialog" class="sheet-close-form"><button class="icon-btn" aria-label="Đóng">✕</button></form>
-    <div class="sheet-body">
-      <p class="eyebrow">Kỹ thuật</p>
-      <div class="more-grid">
-        <button type="button" class="more-item" data-view="test"><span aria-hidden="true">▷</span>Điều khiển thử</button>
-        <button type="button" class="more-item" data-view="mesh"><span aria-hidden="true">⬡</span>Mạng Mesh</button>
-        <button type="button" class="more-item" data-view="api"><span aria-hidden="true">{}</span>API Gateway</button>
-        <button type="button" class="more-item" data-view="log"><span aria-hidden="true">≡</span>Nhật ký</button>
-        <button type="button" class="more-item" data-view="settings"><span aria-hidden="true">⚙</span>Cài đặt</button>
-      </div>
-    </div>
-  </dialog>
 
   <!-- MODAL: HƯỚNG DẪN LẦN ĐẦU -->
   <dialog class="sheet" id="welcome-dialog" aria-labelledby="welcome-title">
@@ -653,9 +643,9 @@
       <h2 id="welcome-title">Chào mừng đến HomeMesh</h2>
       <p class="muted">Web app điều khiển đèn LED 12–18 W, nhiệt độ màu 2700–6500 K qua gateway và BLE Mesh. Đây là bản <b>mô phỏng</b>: mọi thứ chạy trong trình duyệt, không cần phần cứng.</p>
       <ol class="welcome-steps">
-        <li><b>Trang chủ</b> — bấm một đèn, kéo thanh màu để thấy đèn đổi màu.</li>
+        <li><b>Nhà của tôi</b> — bấm đèn trên sơ đồ để bật/tắt; mỗi phòng có kiểu sáng chọn nhanh (Đón khách, Thư giãn…) và thanh chỉnh độ sáng, màu.</li>
+        <li><b>Cảnh</b> — đổi cả nhà một lần: Đọc sách, Xem phim, Đi ngủ…</li>
         <li><b>Thiết bị</b> — quét tìm đèn mới và thêm vào phòng.</li>
-        <li><b>Điều khiển thử</b> — gửi lệnh lặp lại và đo độ trễ có đạt dưới 50 ms không.</li>
       </ol>
       <p class="small muted">Trên điện thoại: mở menu trình duyệt → <b>Thêm vào Màn hình chính</b> để dùng như app.</p>
       <button class="btn btn-primary full" type="button" id="welcome-ok">Bắt đầu</button>
