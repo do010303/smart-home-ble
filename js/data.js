@@ -69,8 +69,15 @@ export const SCENES = Object.freeze([
   { id: 6, name: 'Đi ngủ', icon: '😴', kelvin: 2700, lightness: 0, desc: 'Tắt toàn bộ đèn', off: true }
 ]);
 
+// Thiết bị chưa vào mạng (Unprovisioned) mà gateway có thể quét thấy.
+// rssi = cường độ tín hiệu trung bình tại gateway; fw = firmware driver.
 export const NEW_DEVICE_CANDIDATES = Object.freeze([
-  { uuid: 'A4C1-38F2-11D0', model: 'LED Panel 18W CCT', rssi: -52, watts: 18 },
-  { uuid: 'A4C1-38F2-11D7', model: 'LED Downlight 12W CCT', rssi: -64, watts: 12 },
-  { uuid: 'A4C1-38F2-12A3', model: 'LED Tube 18W CCT', rssi: -71, watts: 18 }
+  { uuid: 'A4C1-38F2-11D0', model: 'LED Panel 18W CCT', rssi: -52, watts: 18, fw: '1.2.0', oob: 'QR Static OOB' },
+  { uuid: 'A4C1-38F2-11D7', model: 'LED Downlight 12W CCT', rssi: -64, watts: 12, fw: '1.2.0', oob: 'QR Static OOB' },
+  { uuid: 'A4C1-38F2-12A3', model: 'LED Tube 18W CCT', rssi: -71, watts: 18, fw: '1.1.4', oob: 'QR Static OOB' },
+  { uuid: 'A4C1-38F2-13B8', model: 'LED Ceiling 18W CCT', rssi: -58, watts: 18, fw: '1.2.0', oob: 'QR Static OOB' },
+  { uuid: 'A4C1-38F2-14C2', model: 'LED Spot 12W CCT', rssi: -77, watts: 12, fw: '1.1.4', oob: 'No OOB' },
+  { uuid: 'A4C1-38F2-15D9', model: 'LED Strip 12W CCT', rssi: -83, watts: 12, fw: '1.0.9', oob: 'No OOB' }
 ]);
+
+export const DEFAULT_FIRMWARE = '1.2.0';

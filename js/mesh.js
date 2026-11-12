@@ -5,11 +5,27 @@ export const OPCODES = Object.freeze({
   GENERIC_ONOFF_GET: { code: [0x82, 0x01], name: 'Generic OnOff Get', ack: true },
   GENERIC_ONOFF_SET: { code: [0x82, 0x02], name: 'Generic OnOff Set', ack: true },
   GENERIC_ONOFF_SET_UNACK: { code: [0x82, 0x03], name: 'Generic OnOff Set Unack', ack: false },
+  LIGHT_LIGHTNESS_SET: { code: [0x82, 0x4c], name: 'Light Lightness Set', ack: true },
   LIGHT_LIGHTNESS_SET_UNACK: { code: [0x82, 0x4d], name: 'Light Lightness Set Unack', ack: false },
   SCENE_RECALL: { code: [0x82, 0x42], name: 'Scene Recall', ack: true },
   SCENE_RECALL_UNACK: { code: [0x82, 0x43], name: 'Scene Recall Unack', ack: false },
   LIGHT_CTL_SET: { code: [0x82, 0x5e], name: 'Light CTL Set', ack: true },
-  LIGHT_CTL_SET_UNACK: { code: [0x82, 0x5f], name: 'Light CTL Set Unack', ack: false }
+  LIGHT_CTL_SET_UNACK: { code: [0x82, 0x5f], name: 'Light CTL Set Unack', ack: false },
+  // Foundation models (Health / Configuration) — quản lý thiết bị.
+  HEALTH_ATTENTION_SET: { code: [0x80, 0x05], name: 'Health Attention Set', ack: true },
+  HEALTH_ATTENTION_SET_UNACK: { code: [0x80, 0x06], name: 'Health Attention Set Unack', ack: false },
+  CONFIG_SUBSCRIPTION_OVERWRITE: { code: [0x80, 0x1e], name: 'Config Model Subscription Overwrite', ack: true },
+  CONFIG_NODE_RESET: { code: [0x80, 0x49], name: 'Config Node Reset', ack: true }
+});
+
+// Model ID SIG của Light CTL Server — dùng khi đổi group (chuyển phòng).
+export const MODEL_LIGHT_CTL_SERVER = 0x1303;
+
+// Hệ số tải mạng cho mô phỏng: nhân thời gian mỗi chặng.
+export const LOAD_PROFILES = Object.freeze({
+  ideal: { id: 'ideal', label: 'Lý tưởng (phòng thí nghiệm)', scale: 0.7 },
+  normal: { id: 'normal', label: 'Bình thường (nhà ở)', scale: 1 },
+  busy: { id: 'busy', label: 'Nhiễu cao (nhiều Wi-Fi/BLE)', scale: 1.5 }
 });
 
 export const ADDRESS = Object.freeze({
@@ -89,6 +105,30 @@ export function encodeSceneRecall({ scene, tid, ack = false }) {
   return Uint8Array.from([...op.code, ...u16le(scene), tid & 0xff]);
 }
 
+export function encodeLightnessSet({ lightness, tid, ack = false }) {
+  const op = ack ? OPCODES.LIGHT_LIGHTNESS_SET : OPCODES.LIGHT_LIGHTNESS_SET_UNACK;
+  return Uint8Array.from([...op.code, ...u16le(lightness), tid & 0xff]);
+}
+
+// Attention Timer (giây): đèn nháy để người cài đặt nhận ra vị trí thật.
+export function encodeAttentionSet({ seconds, ack = false }) {
+  const op = ack ? OPCODES.HEALTH_ATTENTION_SET : OPCODES.HEALTH_ATTENTION_SET_UNACK;
+  return Uint8Array.from([...op.code, seconds & 0xff]);
+}
+
+export function encodeSubscriptionOverwrite({ elementAddress, groupAddress, modelId = MODEL_LIGHT_CTL_SERVER }) {
+  return Uint8Array.from([
+    ...OPCODES.CONFIG_SUBSCRIPTION_OVERWRITE.code,
+    ...u16le(elementAddress),
+    ...u16le(groupAddress),
+    ...u16le(modelId)
+  ]);
+}
+
+export function encodeNodeReset() {
+  return Uint8Array.from(OPCODES.CONFIG_NODE_RESET.code);
+}
+
 export function opcodeName(bytes) {
   const found = Object.values(OPCODES).find((op) => op.code[0] === bytes[0] && op.code[1] === bytes[1]);
   return found ? found.name : 'Unknown';
@@ -115,10 +155,12 @@ export function createTidCounter(start = 0) {
 const pick = ([min, max], rng) => min + (max - min) * rng();
 
 // Độ trễ từ lúc người dùng thao tác đến lúc đèn ở cách gateway `hops` hop đổi trạng thái.
-// Nếu ack = true: đo toàn bộ thời gian phản hồi (Round-Trip Response Time = lệnh đi + phản hồi trạng thái).
-export function simulateLatency({ hops, path = 'local', segments = 1, ack = false }, rng = Math.random) {
+// oneWay = lệnh tới đèn (so với mục tiêu 50 ms). total = oneWay, hoặc khứ hồi khi ack = true
+// (lệnh đi + Status quay về app). `scale` = hệ số tải mạng (LOAD_PROFILES).
+export function simulateLatency({ hops, path = 'local', segments = 1, ack = false, scale = 1 }, rng = Math.random) {
   const p = LATENCY_PROFILE;
   const breakdown = [];
+  let oneWayParts = 0;
 
   if (path === 'cloud') breakdown.push({ label: 'App → Cloud → Gateway', ms: pick(p.cloudRoundTrip, rng) });
   if (path === 'local') breakdown.push({ label: 'App → Gateway (WebSocket LAN)', ms: pick(p.lanWebSocket, rng) });
@@ -132,6 +174,7 @@ export function simulateLatency({ hops, path = 'local', segments = 1, ack = fals
   }
 
   breakdown.push({ label: 'Node giải mã + cập nhật PWM', ms: pick(p.nodeProcessing, rng) });
+  oneWayParts = breakdown.length;
 
   // Nếu là lệnh có phản hồi (Ack): tính thêm chặng Status phản hồi ngược về gateway / app
   if (ack) {
@@ -143,16 +186,20 @@ export function simulateLatency({ hops, path = 'local', segments = 1, ack = fals
     if (path === 'cloud') breakdown.push({ label: 'Gateway → Cloud → App', ms: pick(p.cloudRoundTrip, rng) * 0.9 });
   }
 
+  breakdown.forEach((part) => { part.ms *= scale; });
+  const round = (v) => Math.round(v * 10) / 10;
   const total = breakdown.reduce((sum, part) => sum + part.ms, 0);
-  return { total: Math.round(total * 10) / 10, breakdown, isAck: ack };
+  const oneWay = breakdown.slice(0, oneWayParts).reduce((sum, part) => sum + part.ms, 0);
+  return { total: round(total), oneWay: round(oneWay), breakdown, isAck: ack };
 }
 
 // Lệnh group: 1 gói tới địa chỉ group, mọi đèn nhận gần như cùng lúc. Độ trễ = đèn chậm nhất.
 export function simulateGroupLatency(nodes, options, rng = Math.random) {
-  if (nodes.length === 0) return { total: 0, perNode: [], slowest: null };
+  if (nodes.length === 0) return { total: 0, oneWay: 0, perNode: [], slowest: null };
   const perNode = nodes.map((node) => ({ node, ...simulateLatency({ ...options, hops: node.hops }, rng) }));
   const slowest = perNode.reduce((a, b) => (b.total > a.total ? b : a));
-  return { total: slowest.total, perNode, slowest };
+  const oneWay = Math.max(...perNode.map((p) => p.oneWay));
+  return { total: slowest.total, oneWay, perNode, slowest };
 }
 
 // Thống kê độ trễ và Jitter (độ biến thiên trễ gói tin liên tiếp).
@@ -169,7 +216,8 @@ export function latencyStats(samples, target = MESH_LIMITS.targetLatencyMs) {
   const within = sorted.filter((v) => v < target).length;
   const min = sorted[0];
 
-  // Tính Jitter RFC 3550 (chênh lệch trễ giữa các gói liên tiếp)
+  // Jitter = trung bình |Δ độ trễ| giữa hai lệnh liên tiếp (IPDV, RFC 5481).
+  // Không phải bộ lọc làm mượt 1/16 của RFC 3550.
   let jitterSum = 0;
   let jitterMax = 0;
   let jitterCurrent = 0;

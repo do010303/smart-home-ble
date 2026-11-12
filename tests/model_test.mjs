@@ -7,7 +7,16 @@ import {
   encodeSceneRecall, latencyStats, opcodeName, segmentsNeeded, simulateGroupLatency, simulateLatency, toHex
 } from '../js/mesh.js';
 import { DEFAULT_LIGHTS, ROOMS } from '../js/data.js';
-import { executeApiRequest } from '../js/api.js';
+import { executeApiRequest, buildCurl, API_CATALOG } from '../js/api.js';
+import {
+  DEFAULT_SETTINGS, buildBackup, parseBackup, resolveTheme, sanitizeSettings
+} from '../js/settings.js';
+import { planScan, rssiBars, webBluetoothSupport } from '../js/scanner.js';
+import { buildCommand, expectsStatus, paramsForIteration, statePatch } from '../js/testbench.js';
+import {
+  encodeAttentionSet, encodeNodeReset, encodeSubscriptionOverwrite, encodeLightnessSet
+} from '../js/mesh.js';
+import { NEW_DEVICE_CANDIDATES } from '../js/data.js';
 
 let passed = 0;
 const test = (name, fn) => { fn(); passed += 1; console.log(`✓ ${name}`); };
@@ -112,7 +121,7 @@ test('Lệnh group lấy độ trễ của đèn chậm nhất', () => {
   assert.equal(g.total, Math.max(...g.perNode.map((p) => p.total)));
 });
 
-test('Thống kê latency & Jitter (Mean delay variation RFC 3550)', () => {
+test('Thống kê latency & Jitter (IPDV trung bình)', () => {
   const s = latencyStats([10, 20, 30, 40, 60]);
   assert.equal(s.avg, 32);
   assert.equal(s.max, 60);
@@ -172,6 +181,99 @@ test('Mô phỏng API Gateway: GET /lights và PUT /lights hoạt động chuẩ
   assert.equal(putRes.status, 200);
   assert.equal(fakeState.lights.find((l) => l.id === 'L1').on, true);
   assert.equal(fakeState.lights.find((l) => l.id === 'L1').kelvin, 5000);
+});
+
+// ---------- Độ trễ một chiều vs khứ hồi
+test('Độ trễ một chiều không đổi khi bật Ack; khứ hồi lớn hơn', () => {
+  const r = simulateLatency({ hops: 3, path: 'local', ack: true }, worst);
+  const u = simulateLatency({ hops: 3, path: 'local', ack: false }, worst);
+  assert.equal(r.oneWay, u.oneWay);
+  assert.equal(u.total, u.oneWay);
+  assert.ok(r.total > r.oneWay);
+  assert.ok(r.oneWay < MESH_LIMITS.targetLatencyMs, 'mục tiêu 50 ms áp cho chiều đi');
+});
+
+test('Hệ số tải mạng nhân thời gian từng chặng', () => {
+  const base = simulateLatency({ hops: 2, path: 'local' }, worst);
+  const busy = simulateLatency({ hops: 2, path: 'local', scale: 1.5 }, worst);
+  assert.ok(Math.abs(busy.oneWay - base.oneWay * 1.5) < 0.2);
+});
+
+// ---------- Opcode quản lý thiết bị
+test('Health Attention / Node Reset / Subscription Overwrite / Lightness Set', () => {
+  assert.equal(toHex(encodeAttentionSet({ seconds: 5, ack: true })), '80 05 05');
+  assert.equal(toHex(encodeAttentionSet({ seconds: 5 })), '80 06 05');
+  assert.equal(toHex(encodeNodeReset()), '80 49');
+  assert.equal(toHex(encodeSubscriptionOverwrite({ elementAddress: 0x0006, groupAddress: 0xc002 })), '80 1E 06 00 02 C0 03 13');
+  assert.equal(toHex(encodeLightnessSet({ lightness: 0xffff, tid: 1, ack: true })), '82 4C FF FF 01');
+  assert.equal(opcodeName(encodeNodeReset()), 'Config Node Reset');
+});
+
+// ---------- Cài đặt
+test('Cài đặt: giữ giá trị hợp lệ, chặn giá trị sai', () => {
+  const s = sanitizeSettings({ ttl: 99, throttleMs: 5, theme: 'neon', gatewayHost: 'bad host!', gatewayName: '  GW-02 ', animations: false });
+  assert.equal(s.ttl, 7);
+  assert.equal(s.throttleMs, 20);
+  assert.equal(s.theme, DEFAULT_SETTINGS.theme);
+  assert.equal(s.gatewayHost, DEFAULT_SETTINGS.gatewayHost);
+  assert.equal(s.gatewayName, 'GW-02');
+  assert.equal(s.animations, false);
+  assert.deepEqual(sanitizeSettings(null), { ...DEFAULT_SETTINGS });
+  assert.equal(resolveTheme('system', false), 'light');
+  assert.equal(resolveTheme('dark', false), 'dark');
+});
+
+test('Sao lưu → khôi phục giữ nguyên đèn, từ chối file lỗi', () => {
+  const lights = DEFAULT_LIGHTS.map((l) => ({ ...l, hops: 1, rssi: -50, lastPacket: {} }));
+  const backup = buildBackup({ settings: DEFAULT_SETTINGS, lights });
+  assert.ok(!('hops' in backup.lights[0]) && !('lastPacket' in backup.lights[0]));
+  const rooms = ROOMS.map((r) => r.id);
+  const back = parseBackup(JSON.stringify(backup), rooms);
+  assert.equal(back.ok, true);
+  assert.equal(back.lights.length, DEFAULT_LIGHTS.length);
+  assert.equal(parseBackup('{oops', rooms).ok, false);
+  assert.equal(parseBackup(JSON.stringify({ format: 'x' }), rooms).ok, false);
+  const dup = { ...backup, lights: [backup.lights[0], backup.lights[0]] };
+  assert.equal(parseBackup(JSON.stringify(dup), rooms).ok, false);
+});
+
+// ---------- Quét thiết bị
+test('Quét: bỏ thiết bị đã vào mạng, tín hiệu mạnh thấy trước', () => {
+  const taken = [NEW_DEVICE_CANDIDATES[0].uuid];
+  const plan = planScan(NEW_DEVICE_CANDIDATES, taken, () => 0.5);
+  assert.equal(plan.length, NEW_DEVICE_CANDIDATES.length - 1);
+  assert.ok(plan.every((d) => d.uuid !== taken[0]));
+  for (let i = 1; i < plan.length; i += 1) assert.ok(plan[i].atMs >= plan[i - 1].atMs);
+  assert.ok(plan[0].rssi >= plan[plan.length - 1].rssi);
+  assert.equal(rssiBars(-50), 4);
+  assert.equal(rssiBars(-90), 0);
+});
+
+test('Web Bluetooth: báo đúng khi không hỗ trợ', () => {
+  assert.equal(webBluetoothSupport({}, true).supported, false);
+  assert.equal(webBluetoothSupport({ bluetooth: { requestDevice() {} } }, false).supported, false);
+  assert.equal(webBluetoothSupport({ bluetooth: { requestDevice() {} } }, true).supported, true);
+});
+
+// ---------- Điều khiển thử
+test('Điều khiển thử: mã hoá lệnh, đảo trạng thái, quét màu', () => {
+  assert.equal(toHex(buildCommand('onoff', { on: true }, { tid: 2, ack: false })), '82 03 01 02');
+  assert.equal(toHex(buildCommand('get', {}, { tid: 0, ack: false })), '82 01');
+  assert.equal(expectsStatus('get', false), true);
+  assert.equal(expectsStatus('onoff', false), false);
+  assert.equal(paramsForIteration('toggle', {}, 0, 4, false).on, true);
+  assert.equal(paramsForIteration('toggle', {}, 1, 4, false).on, false);
+  assert.equal(paramsForIteration('sweep', {}, 0, 5).kelvin, 2700);
+  assert.equal(paramsForIteration('sweep', {}, 4, 5).kelvin, 6500);
+  assert.deepEqual(statePatch('ctl', { lightness: 40, kelvin: 9000 }), { on: true, lightness: 40, kelvin: 6500 });
+  assert.equal(statePatch('get', {}), null);
+});
+
+test('API: cURL theo địa chỉ gateway, có endpoint xoá và nháy đèn', () => {
+  const put = API_CATALOG.find((a) => a.method === 'PUT');
+  assert.ok(buildCurl(put, 'http://10.0.0.2:9000').startsWith('curl -X PUT http://10.0.0.2:9000/api/v1/lights/L1'));
+  assert.ok(API_CATALOG.some((a) => a.method === 'DELETE'));
+  assert.ok(API_CATALOG.some((a) => a.path.endsWith('/identify')));
 });
 
 console.log(`\n${passed} test passed.`);

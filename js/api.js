@@ -11,67 +11,77 @@ export const API_CATALOG = Object.freeze([
     path: '/api/v1/lights',
     description: 'Lấy danh sách tất cả đèn và trạng thái thời gian thực',
     sampleBody: null,
-    sampleCurl: 'curl -X GET http://192.168.1.100:8080/api/v1/lights'
   },
   {
     method: 'GET',
     path: '/api/v1/lights/L1',
     description: 'Lấy thông tin chi tiết một đèn theo ID',
     sampleBody: null,
-    sampleCurl: 'curl -X GET http://192.168.1.100:8080/api/v1/lights/L1'
   },
   {
     method: 'PUT',
     path: '/api/v1/lights/L1',
     description: 'Điều khiển bật/tắt, độ sáng (%) và nhiệt độ màu (K) của một đèn',
     sampleBody: { on: true, lightness: 85, kelvin: 4000 },
-    sampleCurl: "curl -X PUT http://192.168.1.100:8080/api/v1/lights/L1 \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"on\":true,\"lightness\":85,\"kelvin\":4000}'"
+  },
+  {
+    method: 'POST',
+    path: '/api/v1/lights/L1/identify',
+    description: 'Cho đèn nháy để nhận diện vị trí thật (Health Attention)',
+    sampleBody: { seconds: 5 }
+  },
+  {
+    method: 'DELETE',
+    path: '/api/v1/lights/L8',
+    description: 'Xoá đèn khỏi mạng Mesh (Config Node Reset)',
+    sampleBody: null
   },
   {
     method: 'POST',
     path: '/api/v1/rooms/living/control',
     description: 'Điều khiển đồng thời toàn bộ đèn trong một phòng (1 gói group)',
     sampleBody: { on: true, lightness: 70, kelvin: 3000 },
-    sampleCurl: "curl -X POST http://192.168.1.100:8080/api/v1/rooms/living/control \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"on\":true,\"lightness\":70,\"kelvin\":3000}'"
   },
   {
     method: 'GET',
     path: '/api/v1/scenes',
     description: 'Lấy danh sách các ngữ cảnh ánh sáng (Scene Recall)',
     sampleBody: null,
-    sampleCurl: 'curl -X GET http://192.168.1.100:8080/api/v1/scenes'
   },
   {
     method: 'POST',
     path: '/api/v1/scenes/1/recall',
     description: 'Kích hoạt ngữ cảnh ánh sáng (Scene 1: Thư giãn, 2: Đọc sách, ...)',
     sampleBody: { scope: 'all' },
-    sampleCurl: "curl -X POST http://192.168.1.100:8080/api/v1/scenes/1/recall \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"scope\":\"all\"}'"
   },
   {
     method: 'GET',
     path: '/api/v1/mesh/metrics',
     description: 'Lấy các chỉ số độ trễ, Jitter và thống kê gói tin BLE Mesh',
     sampleBody: null,
-    sampleCurl: 'curl -X GET http://192.168.1.100:8080/api/v1/mesh/metrics'
   },
   {
     method: 'POST',
     path: '/api/v1/mesh/scan',
     description: 'Gateway phát lệnh quét Unprovisioned Beacons tìm đèn mới',
     sampleBody: null,
-    sampleCurl: 'curl -X POST http://192.168.1.100:8080/api/v1/mesh/scan'
   },
   {
     method: 'POST',
     path: '/api/v1/mesh/provision',
     description: 'Gia nhập thiết bị mới vào mạng Mesh và gán vào phòng',
     sampleBody: { uuid: 'A4C1-38F2-11D0', roomId: 'living' },
-    sampleCurl: "curl -X POST http://192.168.1.100:8080/api/v1/mesh/provision \\\n  -H 'Content-Type: application/json' \\\n  -d '{\"uuid\":\"A4C1-38F2-11D0\",\"roomId\":\"living\"}'"
   }
 ]);
 
 export const apiCallHistory = [];
+
+// Lệnh cURL tương ứng, theo địa chỉ gateway trong Cài đặt.
+export function buildCurl(item, baseUrl) {
+  const url = `${baseUrl}${item.path}`;
+  if (!item.sampleBody) return `curl -X ${item.method} ${url}`;
+  return `curl -X ${item.method} ${url} \\\n  -H 'Content-Type: application/json' \\\n  -d '${JSON.stringify(item.sampleBody)}'`;
+}
 
 export function executeApiRequest({ method, path, body = null, context }) {
   const startTime = performance.now();
@@ -137,6 +147,31 @@ export function executeApiRequest({ method, path, body = null, context }) {
         };
       }
     }
+    // POST /api/v1/lights/:id/identify
+    else if (normalizedMethod === 'POST' && /^\/api\/v1\/lights\/[^/]+\/identify$/.test(cleanPath)) {
+      const id = cleanPath.split('/')[4];
+      if (!context.lightById(id)) {
+        status = 404;
+        statusText = 'Not Found';
+        responseData = { ok: false, error: `Không tìm thấy đèn với ID: ${id}` };
+      } else {
+        const seconds = Math.max(1, Math.min(30, Number(body?.seconds) || 5));
+        context.identifyLight(id, seconds);
+        responseData = { ok: true, message: `Đèn ${id} đang nháy ${seconds} giây`, seconds };
+      }
+    }
+    // DELETE /api/v1/lights/:id
+    else if (normalizedMethod === 'DELETE' && cleanPath.startsWith('/api/v1/lights/')) {
+      const id = cleanPath.split('/')[4];
+      if (!context.lightById(id)) {
+        status = 404;
+        statusText = 'Not Found';
+        responseData = { ok: false, error: `Không tìm thấy đèn với ID: ${id}` };
+      } else {
+        context.removeLight(id);
+        responseData = { ok: true, message: `Đã xoá đèn ${id} khỏi mạng (Config Node Reset)` };
+      }
+    }
     // 4. POST /api/v1/rooms/:roomId/control
     else if (normalizedMethod === 'POST' && cleanPath.match(/^\/api\/v1\/rooms\/([^/]+)\/control$/)) {
       const roomId = cleanPath.split('/')[4];
@@ -172,10 +207,12 @@ export function executeApiRequest({ method, path, body = null, context }) {
     // 7. GET /api/v1/mesh/metrics
     else if (normalizedMethod === 'GET' && cleanPath === '/api/v1/mesh/metrics') {
       const stats = context.latencyStats(context.state.samples);
+      const rtt = context.latencyStats(context.state.rttSamples ?? []);
       responseData = {
         ok: true,
         metrics: {
-          ...stats,
+          oneWay: stats,
+          roundTrip: { count: rtt.count, avg: rtt.avg, p95: rtt.p95, max: rtt.max },
           gatewayOnline: context.state.gatewayOnline,
           activePath: context.state.path,
           nodeCount: context.state.lights.length
@@ -269,6 +306,12 @@ export function registerGlobalApi(context) {
     },
     async scan() {
       return executeApiRequest({ method: 'POST', path: '/api/v1/mesh/scan', context });
+    },
+    async identify(id, seconds = 5) {
+      return executeApiRequest({ method: 'POST', path: `/api/v1/lights/${id}/identify`, body: { seconds }, context });
+    },
+    async removeLight(id) {
+      return executeApiRequest({ method: 'DELETE', path: `/api/v1/lights/${id}`, context });
     },
     async provision(uuid, roomId) {
       return executeApiRequest({ method: 'POST', path: '/api/v1/mesh/provision', body: { uuid, roomId }, context });
