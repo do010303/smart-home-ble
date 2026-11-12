@@ -1,6 +1,8 @@
-# HomeMesh MVP — Smart Lighting qua BLE Mesh
+# HomeMesh — Smart Lighting qua BLE Mesh
 
-Demo và thiết kế MVP cho hệ thống chiếu sáng thông minh (web + app):
+**Dùng thử online:** https://do010303.github.io/smart-home-ble/ — mở trên máy tính hoặc điện thoại, không cần cài đặt.
+
+Web app (cài được như ứng dụng điện thoại) cho hệ thống chiếu sáng thông minh:
 
 - Đèn LED **12 W / 18 W**, nhiệt độ màu **2700 K – 6500 K**, thanh trượt hiển thị dải màu thật
 - **Driver + Gateway** vào mạng nhà, toàn hệ thống chạy **BLE Mesh**
@@ -11,15 +13,34 @@ Demo và thiết kế MVP cho hệ thống chiếu sáng thông minh (web + app)
 | Màn hình | Nội dung |
 | --- | --- |
 | Trang chủ | Bật/tắt, độ sáng, màu cho từng đèn và cả phòng (1 gói group) |
-| Sơ đồ nhà (Mặt bằng) | Layout mặt bằng kiến trúc 2D (4 phòng), quầng sáng CCT theo Kelvin & độ sáng thật, bật/tắt trực tiếp trên bản vẽ, bảng tổng kết năng lượng |
-| Chi tiết đèn | Slider gradient 2700–6500 K, preset, PWM kênh ấm/lạnh, công suất, gói tin hex |
+| Sơ đồ nhà | Mặt bằng 4 phòng, quầng sáng theo màu và độ sáng thật, bật/tắt ngay trên bản vẽ, công suất theo phòng |
+| Thiết bị | **Quét** đèn mới (radar, cường độ tín hiệu), **thêm** vào phòng qua provisioning 7 bước, **nháy nhận diện**, **đổi tên / chuyển phòng / xoá** khỏi mạng; thử **Bluetooth thật** của máy qua Web Bluetooth |
+| Chi tiết đèn | Slider gradient 2700–6500 K, preset, PWM kênh ấm/lạnh, công suất, gói tin hex, nháy nhận diện |
 | Cảnh | 6 cảnh, gọi cho toàn nhà hoặc từng phòng (Scene Recall) |
-| Mạng Mesh & Jitter | Sơ đồ topology có hiệu ứng lan gói, đo độ trễ & **Jitter (TB/P95/Max)**, đo độ trễ lệnh phản hồi (Round-Trip Ack), kịch bản mô phỏng thao tác, stress test, ping, mô phỏng mất gateway, provisioning đèn mới |
-| API Gateway | Console thử nghiệm REST API Gateway v1 (GET, PUT, POST), mẫu cURL, xem JSON response, hỗ trợ gọi qua `window.HomeMeshAPI` |
+| Điều khiển thử | Soạn lệnh (8 loại: OnOff, Lightness, CTL, quét màu, Scene, Get, Identify…), chọn đích đèn / phòng / toàn nhà, **xem trước gói tin**, chạy lặp tới 200 lần, đo độ trễ một chiều và khứ hồi, kết luận Đạt / Chưa đạt; 4 bài thử nhanh |
+| Mạng Mesh | Sơ đồ topology có hiệu ứng lan gói, độ trễ **một chiều** (so với mục tiêu) tách riêng với **khứ hồi** (lệnh có Ack), jitter, stress test, ping, mô phỏng mất gateway |
+| API Gateway | Console REST v1 (GET, PUT, POST, DELETE), lệnh cURL theo địa chỉ gateway trong Cài đặt, gọi được từ DevTools qua `window.HomeMeshAPI` |
 | Nhật ký | Access message thật (opcode, payload little-endian, segment, TTL), xuất JSON |
-| Giao diện | Nút chuyển đổi nhanh **Sáng (Light Mode)** và **Tối (Dark Mode)** |
+| Cài đặt | Chủ đề Sáng / Tối / theo hệ thống; tên và IP gateway; TTL, mục tiêu độ trễ, nhịp gửi slider, môi trường mô phỏng; sao lưu / khôi phục ra file; khôi phục mặc định; cài làm ứng dụng; sao chép link chia sẻ |
 
 Có 3 đường truyền để so sánh: **LAN** (gateway), **BLE** (GATT Proxy), **Cloud**.
+
+## Hướng dẫn nhanh
+
+1. Mở link dùng thử. Lần đầu sẽ có hộp hướng dẫn ngắn.
+2. **Trang chủ** → bấm một đèn → kéo thanh **Nhiệt độ màu** để thấy đèn đổi từ vàng ấm sang trắng.
+3. **Thiết bị** → **Bắt đầu quét** → bấm **Thêm** ở một đèn tìm thấy → đặt tên, chọn phòng → **Bắt đầu provisioning**.
+4. **Điều khiển thử** → chọn đích và lệnh → **Chạy thử** → xem độ trễ có đạt dưới 50 ms không.
+5. **Cài đặt** → đổi TTL xuống 2 để thấy các đèn ở xa 3 hop bị cảnh báo vượt tầm.
+
+Dữ liệu (đèn đã thêm, cài đặt) lưu trong trình duyệt của từng người — mỗi người mở link có một "ngôi nhà" riêng, không ảnh hưởng nhau.
+
+### Cài như ứng dụng điện thoại
+
+- **Android (Chrome):** mở link → menu ⋮ → **Cài đặt ứng dụng** / **Thêm vào màn hình chính**. Hoặc vào **Cài đặt → Cài làm ứng dụng**.
+- **iPhone (Safari):** mở link → nút Chia sẻ → **Thêm vào MH chính**.
+
+Sau khi cài, app mở toàn màn hình và vẫn chạy khi mất mạng.
 
 > Tầng BLE Mesh được **mô phỏng** (chưa cần phần cứng). Gói tin được mã hoá đúng đặc tả SIG Mesh Model; độ trễ và Jitter lấy từ mô hình trong `js/mesh.js`, cần đo lại trên phần cứng thật.
 
@@ -30,11 +51,22 @@ smart-home-ble/
 ├── index.html
 ├── css/style.css
 ├── js/
-│   ├── app.js        # UI + state + luồng điều khiển
-│   ├── api.js        # REST & WebSocket API Gateway simulation + window.HomeMeshAPI
+│   ├── app.js        # state, điều hướng, điều khiển đèn, các màn hình gốc
+│   ├── api.js        # REST API Gateway mô phỏng + window.HomeMeshAPI
 │   ├── cct.js        # màu & driver (Kelvin → RGB, trộn PWM, công suất)
-│   ├── mesh.js       # gói tin BLE Mesh, mô hình độ trễ, Jitter, thống kê
-│   └── data.js       # phòng, đèn, tọa độ mặt bằng nhà, cảnh mẫu
+│   ├── mesh.js       # gói tin BLE Mesh, mô hình độ trễ một chiều / khứ hồi, jitter
+│   ├── data.js       # phòng, đèn, toạ độ mặt bằng, cảnh, thiết bị quét được
+│   ├── scanner.js    # lịch quét mô phỏng, cường độ tín hiệu, Web Bluetooth
+│   ├── testbench.js  # mã hoá lệnh cho màn hình Điều khiển thử
+│   ├── settings.js   # cài đặt mặc định, kiểm tra hợp lệ, sao lưu / khôi phục
+│   └── ui/
+│       ├── devices.js    # màn hình Thiết bị
+│       ├── testbench.js  # màn hình Điều khiển thử
+│       └── settings.js   # màn hình Cài đặt
+├── assets/           # biểu tượng ứng dụng
+├── manifest.webmanifest  # khai báo PWA (cài như app)
+├── sw.js             # service worker: dùng offline
+├── .github/workflows/deploy.yml  # chạy test rồi đưa lên GitHub Pages
 ├── docs/
 │   ├── ARCHITECTURE.md   # kiến trúc, stack, ngân sách độ trễ
 │   ├── FLOWS.md          # luồng hoạt động (sequence diagram)
@@ -97,11 +129,17 @@ Cần Node.js 18 trở lên.
 node tests/model_test.mjs
 ```
 
+28 test: màu & PWM, mã hoá gói tin (gồm Health Attention, Node Reset, Subscription Overwrite), độ trễ một chiều / khứ hồi, quét thiết bị, cài đặt và sao lưu, lệnh điều khiển thử, API.
+
 Test thủ công: `docs/TEST_CASES.md`.
 
-## Deploy GitHub Pages
+## Deploy (GitHub Pages)
 
-Giống bài Hello Calculator: push lên repo → Settings → Pages → Branch `main` / root. File `.nojekyll` đã có sẵn.
+Mỗi lần push lên `main`, GitHub Actions ([deploy.yml](.github/workflows/deploy.yml)) chạy unit test; test đạt thì đẩy bản mới sang nhánh `gh-pages` và trang online tự cập nhật sau khoảng 1 phút.
+
+Thiết lập một lần (nếu link còn báo 404): repo → **Settings → Pages** → Source **Deploy from a branch** → Branch **`gh-pages`** / **`/ (root)`** → **Save**.
+
+Khi phát hành bản mới có đổi file, tăng `CACHE` trong `sw.js` để máy đã cài app nhận bản mới ngay.
 
 ## Lộ trình sau MVP
 
