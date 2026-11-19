@@ -6,23 +6,23 @@ import { FLOORS, FURNITURE, GATEWAY_FLOORPLAN_POS, ROOMS } from '../data.js';
 // Mô hình 3D căn hộ (Three.js, tải khi mở chế độ 3D lần đầu).
 // Mỗi đèn là một PointLight thật: màu theo Kelvin, cường độ theo độ sáng tuyến tính của driver.
 
-const THREE_URL = new URL('../vendor/three.module.min.js', import.meta.url).href;
+const THREE_URL = new URL('../vendor/three.module.min.js', import.meta.url).href;  // Đường dẫn Three.js trong js/vendor/
 const S = 0.1; // 1 đơn vị mặt bằng = 0,1 m
-const X = (x) => (x - 50) * S;
-const Z = (y) => (y - 50) * S;
+const X = (x) => (x - 50) * S;  // Toạ độ mặt bằng x → mét
+const Z = (y) => (y - 50) * S;  // Toạ độ mặt bằng y → mét
 const WALL_H = 1.15; // cắt tường thấp để nhìn được vào trong phòng
 const WALL_T = 0.14;
 const CEIL = 2.45;
 const LIGHT_CANDELA = 22; // cường độ tương đối cho bóng 18 W ở 100 %
 
-const COLORS = {
+const COLORS = {  // Màu vật liệu 3D
   wood: '#a77b55', woodDark: '#6b4a34', fabric: '#62718a', fabricDark: '#4a566b',
   sheet: '#efebe3', blanket: '#6f93c8', pillow: '#faf8f3', metal: '#d3d8de', counter: '#ece8e1',
   counterTop: '#3b3b3e', dark: '#2a2b2e', screen: '#0f1115', glass: '#a9c3d3', pot: '#c47a52',
   leaf: '#4f8f4c', wall: '#ebe7e1', lampShade: '#f3e9d6', gateway: '#3b82f6'
 };
-const RUG = { bedroom: '#b98a74', living: '#7f927b' };
-const BOOKS = ['#b94a48', '#3e6fb0', '#d9a441', '#4c8b6b', '#7a5aa6'];
+const RUG = { bedroom: '#b98a74', living: '#7f927b' };  // Màu thảm theo phòng
+const BOOKS = ['#b94a48', '#3e6fb0', '#d9a441', '#4c8b6b', '#7a5aa6'];  // Màu gáy sách
 
 // Dải sát một cạnh (giống bản 2D).
 function strip(f, side, t) {
@@ -31,9 +31,9 @@ function strip(f, side, t) {
   if (side === 'left') return { x: f.x, y: f.y, w: t, h: f.h };
   return { x: f.x + f.w - t, y: f.y, w: t, h: f.h };
 }
-const inset = (f, d) => ({ x: f.x + d, y: f.y + d, w: f.w - 2 * d, h: f.h - 2 * d });
+const inset = (f, d) => ({ x: f.x + d, y: f.y + d, w: f.w - 2 * d, h: f.h - 2 * d });  // Thu nhỏ hình chữ nhật đều 4 cạnh
 
-export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpen }) {
+export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpen }) {  // Dựng mô hình 3D căn hộ và trả { sync, flash, resetView, setDaylight, resize }
   const THREE = await import(THREE_URL);
   const canvas = host.querySelector('canvas');
   const labelLayer = host.querySelector('.fp3d-labels');
@@ -66,7 +66,7 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
     mesh.position.set(X(rect.x) + w / 2, y0 + h / 2, Z(rect.y) + d / 2);
     return mesh;
   }
-  function legs(rect, top, color) {
+  function legs(rect, top, color) {  // 4 chân bàn / ghế
     const g = [];
     const t = 0.6;
     [[0, 0], [1, 0], [0, 1], [1, 1]].forEach(([a, b]) => {
@@ -76,7 +76,7 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
   }
 
   // ------------------------------------------------ Sàn có hoạ tiết
-  function floorTexture(kind) {
+  function floorTexture(kind) {  // Vẽ vân gỗ / gạch lên canvas làm texture
     const c = document.createElement('canvas');
     c.width = 256;
     c.height = 256;
@@ -239,7 +239,7 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
   const linkMat = new THREE.LineDashedMaterial({ color: '#ff9f1a', dashSize: 0.16, gapSize: 0.08, transparent: true, opacity: 0.95 });
   const linkFlashMat = new THREE.LineBasicMaterial({ color: '#fbbf24' });
 
-  function removeLightObj(id) {
+  function removeLightObj(id) {  // Bỏ đèn khỏi cảnh 3D
     const o = lights.get(id);
     if (!o) return;
     world.remove(o.group);
@@ -249,7 +249,7 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
     lights.delete(id);
   }
 
-  function addLightObj(l) {
+  function addLightObj(l) {  // Thêm đèn vào cảnh 3D
     const group = new THREE.Group();
     group.position.set(X(l.fx), 0, Z(l.fy));
     const fixture = new THREE.Mesh(fixtureGeo, new THREE.MeshBasicMaterial({ color: '#555' }));
@@ -290,7 +290,7 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
     return { el, pos: new THREE.Vector3(X(room.labelPos.x), 0.05, Z(room.labelPos.y)) };
   });
 
-  function sync() {
+  function sync() {  // Đồng bộ mô hình 3D với state (gọi sau mỗi refresh)
     const ids = new Set(state.lights.map((l) => l.id));
     [...lights.keys()].forEach((id) => { if (!ids.has(id)) removeLightObj(id); });
     const now = Date.now();
@@ -325,7 +325,7 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
     if (state.lights.some((l) => l.identifyUntil > now)) setTimeout(sync, 250);
   }
 
-  function flash(targets) {
+  function flash(targets) {  // Tô sáng đường mesh khi có gói
     targets.forEach((l) => {
       const o = lights.get(l.id);
       if (!o) return;
@@ -339,7 +339,7 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
   // ------------------------------------------------ Camera xoay quanh nhà
   const view = { theta: -0.6, phi: 0.86, radius: 19.5 };
   const target = new THREE.Vector3(0, 0.4, 0);
-  function placeCamera() {
+  function placeCamera() {  // Đặt camera theo góc xoay
     camera.position.set(
       target.x + view.radius * Math.sin(view.phi) * Math.sin(view.theta),
       target.y + view.radius * Math.cos(view.phi),
@@ -349,17 +349,17 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
   }
 
   let frame = 0;
-  function requestRender() {
+  function requestRender() {  // Hẹn vẽ ở khung hình kế (chỉ khi cần)
     if (!frame) frame = requestAnimationFrame(render);
   }
   const tmp = new THREE.Vector3();
-  function place(el, pos, w, h) {
+  function place(el, pos, w, h) {  // Đặt nhãn HTML theo toạ độ 3D
     tmp.copy(pos).project(camera);
     const visible = tmp.z < 1;
     el.style.transform = `translate(-50%, -50%) translate(${((tmp.x + 1) / 2) * w}px, ${((1 - tmp.y) / 2) * h}px)`;
     el.style.visibility = visible ? '' : 'hidden';
   }
-  function render() {
+  function render() {  // Vẽ lại màn hình này (app.js gọi khi mở / khi dữ liệu đổi)
     frame = 0;
     placeCamera();
     renderer.render(scene, camera);
@@ -369,7 +369,7 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
     roomLabels.forEach((r) => place(r.el, r.pos, w, h));
   }
 
-  function resize() {
+  function resize() {  // Khớp kích thước khung vẽ
     const w = host.clientWidth;
     const h = host.clientHeight;
     if (!w || !h) return;
@@ -390,7 +390,7 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
   const ray = new THREE.Raycaster();
   const ndc = new THREE.Vector2();
 
-  function pick(e) {
+  function pick(e) {  // Đèn nằm dưới con trỏ (Raycaster)
     const rect = canvas.getBoundingClientRect();
     ndc.set(((e.clientX - rect.left) / rect.width) * 2 - 1, -((e.clientY - rect.top) / rect.height) * 2 + 1);
     ray.setFromCamera(ndc, camera);
@@ -449,17 +449,17 @@ export async function mountFloorplan3D({ host, state, lightById, onToggle, onOpe
   canvas.addEventListener('pointerup', end);
   canvas.addEventListener('pointercancel', end);
 
-  function zoom(factor) {
+  function zoom(factor) {  // Phóng to / thu nhỏ
     view.radius = Math.min(26, Math.max(6, view.radius * factor));
     requestRender();
   }
   canvas.addEventListener('wheel', (e) => { e.preventDefault(); zoom(1 + Math.sign(e.deltaY) * 0.08); }, { passive: false });
 
-  function resetView() {
+  function resetView() {  // Về góc nhìn mặc định
     Object.assign(view, { theta: -0.6, phi: 0.86, radius: 19.5 });
     requestRender();
   }
-  function setDaylight(day) {
+  function setDaylight(day) {  // Bật / tắt nắng ban ngày
     hemi.intensity = day ? 1.4 : 0.55;
     sun.intensity = day ? 1.6 : 0;
     requestRender();

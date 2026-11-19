@@ -2,7 +2,7 @@
 
 import { roomGroupAddress } from './mesh.js';
 
-export const ROOMS = Object.freeze([
+export const ROOMS = Object.freeze([  // 4 phòng: tên, group, diện tích, vùng trên mặt bằng
   {
     id: 'living',
     name: 'Phòng khách',
@@ -41,12 +41,12 @@ export const ROOMS = Object.freeze([
   }
 ]);
 
-export const GATEWAY_FLOORPLAN_POS = Object.freeze({ x: 48, y: 48 });
+export const GATEWAY_FLOORPLAN_POS = Object.freeze({ x: 48, y: 48 });  // Vị trí gateway trên mặt bằng
 
 // via: node cha trong cây relay ('gateway' = nhận trực tiếp từ gateway).
 // x, y: vị trí trên sơ đồ mạng topology (0–100).
 // fx, fy: vị trí trên sơ đồ mặt bằng nhà floorplan (0–100).
-export const DEFAULT_LIGHTS = Object.freeze([
+export const DEFAULT_LIGHTS = Object.freeze([  // via: node cha trong cây relay ('gateway' = nhận trực tiếp từ gateway)
   { id: 'L1', name: 'Đèn trần chính', room: 'living', unicast: 0x0002, watts: 18, via: 'gateway', relay: true, x: 30, y: 30, fx: 26, fy: 70 },
   { id: 'L2', name: 'Đèn hắt trần', room: 'living', unicast: 0x0003, watts: 12, via: 'gateway', relay: false, x: 18, y: 55, fx: 14, fy: 84 },
   { id: 'L3', name: 'Đèn bàn ăn', room: 'kitchen', unicast: 0x0004, watts: 12, via: 'gateway', relay: true, x: 70, y: 28, fx: 66, fy: 26 },
@@ -57,7 +57,7 @@ export const DEFAULT_LIGHTS = Object.freeze([
   { id: 'L8', name: 'Đèn trần văn phòng', room: 'office', unicast: 0x0009, watts: 18, via: 'L7', relay: false, x: 90, y: 86, fx: 84, fy: 82 }
 ]);
 
-export const DEFAULT_LIGHT_STATE = Object.freeze({ on: true, lightness: 70, kelvin: 4000 });
+export const DEFAULT_LIGHT_STATE = Object.freeze({ on: true, lightness: 70, kelvin: 4000 });  // Trạng thái đèn mới: bật, 70 %, 4000 K
 
 // Scene lưu sẵn trong Scene Server của từng đèn → app chỉ gửi 1 gói Scene Recall.
 export const SCENES = Object.freeze([
@@ -71,7 +71,7 @@ export const SCENES = Object.freeze([
 
 // Thiết bị chưa vào mạng (Unprovisioned) mà gateway có thể quét thấy.
 // rssi = cường độ tín hiệu trung bình tại gateway; fw = firmware driver.
-export const NEW_DEVICE_CANDIDATES = Object.freeze([
+export const NEW_DEVICE_CANDIDATES = Object.freeze([  // Thiết bị chưa vào mạng (Unprovisioned) mà gateway có thể quét thấy
   { uuid: 'A4C1-38F2-11D0', model: 'LED Panel 18W CCT', rssi: -52, watts: 18, fw: '1.2.0', oob: 'QR Static OOB' },
   { uuid: 'A4C1-38F2-11D7', model: 'LED Downlight 12W CCT', rssi: -64, watts: 12, fw: '1.2.0', oob: 'QR Static OOB' },
   { uuid: 'A4C1-38F2-12A3', model: 'LED Tube 18W CCT', rssi: -71, watts: 18, fw: '1.1.4', oob: 'QR Static OOB' },
@@ -84,9 +84,9 @@ export const DEFAULT_FIRMWARE = '1.2.0';
 
 // Nội thất trên mặt bằng (cùng hệ toạ độ 0–100 như fx/fy; 1 đơn vị ≈ 0,1 m).
 // side: phía tựa lưng của sofa/ghế, phía đầu giường, hoặc phía áp tường của tủ/bếp.
-export const FLOORS = Object.freeze({ bedroom: 'wood', living: 'wood', kitchen: 'tile', office: 'wood' });
+export const FLOORS = Object.freeze({ bedroom: 'wood', living: 'wood', kitchen: 'tile', office: 'wood' });  // Nội thất trên mặt bằng (cùng hệ toạ độ 0–100 như fx/fy; 1 đơn vị ≈ 0,1 m)
 
-export const FURNITURE = Object.freeze([
+export const FURNITURE = Object.freeze([  // 26 món nội thất trên mặt bằng
   // Phòng ngủ
   { room: 'bedroom', type: 'rug', x: 22, y: 20, w: 16, h: 22 },
   { room: 'bedroom', type: 'bed', x: 5, y: 22, w: 21, h: 16, side: 'left' },

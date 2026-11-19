@@ -6,7 +6,7 @@ import {
   SCAN_DURATION_MS, planScan, requestMeshDevice, rssiBars, rssiLabel, webBluetoothSupport
 } from '../scanner.js';
 
-const bars = (rssi) => {
+const bars = (rssi) => {  // HTML vạch sóng 4 thanh theo RSSI
   const n = rssiBars(rssi);
   return `<span class="signal" title="${rssi} dBm · ${rssiLabel(rssi)}" aria-label="Tín hiệu ${rssiLabel(rssi)}">${[1, 2, 3, 4]
     .map((i) => `<i class="${i <= n ? 'on' : ''}"></i>`).join('')}</span>`;
@@ -19,7 +19,7 @@ export function mountDevices(ctx) {
   let editingId = null;
 
   // ------------------------------------------------ Quét mô phỏng
-  function startScan() {
+  function startScan() {  // Bắt đầu quét mô phỏng 6 giây
     stopScan(false);
     const taken = state.lights.map((l) => l.uuid).filter(Boolean);
     const plan = planScan(NEW_DEVICE_CANDIDATES, taken);
@@ -44,13 +44,13 @@ export function mountDevices(ctx) {
     renderFound();
   }
 
-  function tickProgress() {
+  function tickProgress() {  // Thanh tiến độ quét mỗi khung hình
     const pct = Math.min(100, ((performance.now() - scan.startedAt) / SCAN_DURATION_MS) * 100);
     $('#scan-progress').style.width = `${scan.running ? pct : 0}%`;
     if (scan.running) scan.raf = requestAnimationFrame(tickProgress);
   }
 
-  function stopScan(finished) {
+  function stopScan(finished) {  // Dừng quét, báo kết quả
     scan.timers.forEach(clearTimeout);
     scan.timers = [];
     cancelAnimationFrame(scan.raf);
@@ -78,7 +78,7 @@ export function mountDevices(ctx) {
     $('#radar').appendChild(blip);
   }
 
-  function renderFound() {
+  function renderFound() {  // Danh sách thiết bị tìm thấy
     const list = $('#found-list');
     $('#found-empty').hidden = scan.found.length > 0 || scan.running;
     list.innerHTML = scan.found.map((d) => `
@@ -93,14 +93,14 @@ export function mountDevices(ctx) {
       </li>`).join('') + (scan.running ? '<li class="found-item searching"><span class="spinner" aria-hidden="true"></span><small class="muted">Đang lắng nghe beacon…</small></li>' : '');
   }
 
-  function forget(uuid) {
+  function forget(uuid) {  // Bỏ thiết bị vừa thêm khỏi danh sách quét
     scan.found = scan.found.filter((d) => d.uuid !== uuid);
     $('#radar').querySelectorAll('.blip').forEach((b) => { if (b.title.includes(uuid)) b.remove(); });
     renderFound();
   }
 
   // ------------------------------------------------ Web Bluetooth
-  function renderWebBleSupport() {
+  function renderWebBleSupport() {  // Báo trình duyệt có Web Bluetooth không
     const support = webBluetoothSupport(navigator, window.isSecureContext);
     const el = $('#webble-support');
     el.textContent = support.supported ? 'Trình duyệt này hỗ trợ Web Bluetooth.' : support.reason;
@@ -108,7 +108,7 @@ export function mountDevices(ctx) {
     $('#btn-webble').disabled = !support.supported;
   }
 
-  async function findRealDevice() {
+  async function findRealDevice() {  // Mở hộp chọn Bluetooth thật của trình duyệt
     const acceptAll = $('#webble-all').checked;
     try {
       const device = await requestMeshDevice(navigator, { acceptAll });
@@ -128,7 +128,7 @@ export function mountDevices(ctx) {
   }
 
   // ------------------------------------------------ Bảng thiết bị trong mạng
-  function render() {
+  function render() {  // Vẽ lại màn hình này (app.js gọi khi mở / khi dữ liệu đổi)
     const lights = state.lights;
     $('#device-count').textContent = `${lights.length} đèn · ${new Set(lights.map((l) => l.room)).size} phòng`;
     $('#device-empty').hidden = lights.length > 0;
@@ -154,7 +154,7 @@ export function mountDevices(ctx) {
     renderFound();
   }
 
-  function openEdit(id) {
+  function openEdit(id) {  // Mở hộp sửa đèn
     const light = ctx.lightById(id);
     if (!light) return;
     editingId = id;
@@ -165,7 +165,7 @@ export function mountDevices(ctx) {
     $('#edit-name').select();
   }
 
-  function saveEdit(e) {
+  function saveEdit(e) {  // Lưu tên / phòng mới
     e.preventDefault();
     const light = ctx.lightById(editingId);
     if (!light) return;
@@ -178,7 +178,7 @@ export function mountDevices(ctx) {
     else if (renamed) ctx.toast(`Đã đổi tên thành “${name}”`);
   }
 
-  async function askRemove(id) {
+  async function askRemove(id) {  // Hỏi lại rồi xoá đèn
     const light = ctx.lightById(id);
     if (!light) return;
     const ok = await ctx.confirmAsk(

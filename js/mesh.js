@@ -28,7 +28,7 @@ export const LOAD_PROFILES = Object.freeze({
   busy: { id: 'busy', label: 'Nhiễu cao (nhiều Wi-Fi/BLE)', scale: 1.5 }
 });
 
-export const ADDRESS = Object.freeze({
+export const ADDRESS = Object.freeze({  // Địa chỉ gateway 0x0001, group cả nhà 0xC000
   GATEWAY: 0x0001,
   GROUP_ALL_LIGHTS: 0xc000
 });
@@ -53,13 +53,13 @@ export const LATENCY_PROFILE = Object.freeze({
   cloudRoundTrip: [60, 160]
 });
 
-export const PATHS = Object.freeze({
+export const PATHS = Object.freeze({  // 3 đường truyền LAN / BLE / Cloud
   local: { id: 'local', label: 'LAN → Gateway', short: 'LAN' },
   proxy: { id: 'proxy', label: 'BLE GATT Proxy', short: 'BLE' },
   cloud: { id: 'cloud', label: 'Cloud MQTT', short: 'Cloud' }
 });
 
-export const PROVISIONING_STEPS = Object.freeze([
+export const PROVISIONING_STEPS = Object.freeze([  // 7 bước ghép nối
   { id: 'beacon', title: 'Quét Unprovisioned Beacon', detail: 'Gateway quét quảng bá UUID thiết bị mới' },
   { id: 'invite', title: 'Invite & Capabilities', detail: 'Thiết bị báo số phần tử, thuật toán, kiểu OOB' },
   { id: 'ecdh', title: 'Trao đổi khoá công khai (ECDH P-256)', detail: 'Tạo khoá phiên bảo mật' },
@@ -69,15 +69,15 @@ export const PROVISIONING_STEPS = Object.freeze([
   { id: 'pubsub', title: 'Config Subscription Add', detail: 'Đăng ký vào group địa chỉ của phòng' }
 ]);
 
-export function formatAddress(address) {
+export function formatAddress(address) {  // Số → chuỗi 0x0006
   return '0x' + address.toString(16).toUpperCase().padStart(4, '0');
 }
 
-export function roomGroupAddress(index) {
+export function roomGroupAddress(index) {  // Group của phòng thứ i = 0xC001 + i
   return ADDRESS.GROUP_ALL_LIGHTS + 1 + index;
 }
 
-const u16le = (v) => [v & 0xff, (v >> 8) & 0xff];
+const u16le = (v) => [v & 0xff, (v >> 8) & 0xff];  // Số 16 bit → 2 byte little-endian
 
 // Light CTL Set: Lightness(2) + Temperature(2) + Delta UV(2) + TID(1) [+ Transition(1) + Delay(1)]
 export function encodeLightCtlSet({ lightness, temperature, deltaUv = 0, tid, ack = false }) {
@@ -91,21 +91,21 @@ export function encodeLightCtlSet({ lightness, temperature, deltaUv = 0, tid, ac
   ]);
 }
 
-export function encodeOnOffSet({ on, tid, ack = false }) {
+export function encodeOnOffSet({ on, tid, ack = false }) {  // Gói bật/tắt (4 byte)
   const op = ack ? OPCODES.GENERIC_ONOFF_SET : OPCODES.GENERIC_ONOFF_SET_UNACK;
   return Uint8Array.from([...op.code, on ? 1 : 0, tid & 0xff]);
 }
 
-export function encodeOnOffGet() {
+export function encodeOnOffGet() {  // Gói đọc trạng thái (2 byte)
   return Uint8Array.from(OPCODES.GENERIC_ONOFF_GET.code);
 }
 
-export function encodeSceneRecall({ scene, tid, ack = false }) {
+export function encodeSceneRecall({ scene, tid, ack = false }) {  // Gói gọi cảnh (5 byte)
   const op = ack ? OPCODES.SCENE_RECALL : OPCODES.SCENE_RECALL_UNACK;
   return Uint8Array.from([...op.code, ...u16le(scene), tid & 0xff]);
 }
 
-export function encodeLightnessSet({ lightness, tid, ack = false }) {
+export function encodeLightnessSet({ lightness, tid, ack = false }) {  // Gói đổi độ sáng (5 byte)
   const op = ack ? OPCODES.LIGHT_LIGHTNESS_SET : OPCODES.LIGHT_LIGHTNESS_SET_UNACK;
   return Uint8Array.from([...op.code, ...u16le(lightness), tid & 0xff]);
 }
@@ -116,7 +116,7 @@ export function encodeAttentionSet({ seconds, ack = false }) {
   return Uint8Array.from([...op.code, seconds & 0xff]);
 }
 
-export function encodeSubscriptionOverwrite({ elementAddress, groupAddress, modelId = MODEL_LIGHT_CTL_SERVER }) {
+export function encodeSubscriptionOverwrite({ elementAddress, groupAddress, modelId = MODEL_LIGHT_CTL_SERVER }) {  // Gói đổi group của đèn (8 byte)
   return Uint8Array.from([
     ...OPCODES.CONFIG_SUBSCRIPTION_OVERWRITE.code,
     ...u16le(elementAddress),
@@ -125,16 +125,16 @@ export function encodeSubscriptionOverwrite({ elementAddress, groupAddress, mode
   ]);
 }
 
-export function encodeNodeReset() {
+export function encodeNodeReset() {  // Gói xoá đèn khỏi mạng (2 byte)
   return Uint8Array.from(OPCODES.CONFIG_NODE_RESET.code);
 }
 
-export function opcodeName(bytes) {
+export function opcodeName(bytes) {  // Tên opcode từ 2 byte đầu
   const found = Object.values(OPCODES).find((op) => op.code[0] === bytes[0] && op.code[1] === bytes[1]);
   return found ? found.name : 'Unknown';
 }
 
-export function toHex(bytes) {
+export function toHex(bytes) {  // Byte → chuỗi hex cách nhau dấu cách
   return Array.from(bytes, (b) => b.toString(16).padStart(2, '0').toUpperCase()).join(' ');
 }
 
@@ -144,7 +144,7 @@ export function segmentsNeeded(accessBytes, transMicBytes = 4) {
   return Math.ceil((accessBytes + transMicBytes) / MESH_LIMITS.segmentPayloadBytes);
 }
 
-export function createTidCounter(start = 0) {
+export function createTidCounter(start = 0) {  // Hàm trả TID tăng dần, quay vòng 0–255
   let tid = start;
   return () => {
     tid = (tid + 1) & 0xff;
@@ -152,12 +152,12 @@ export function createTidCounter(start = 0) {
   };
 }
 
-const pick = ([min, max], rng) => min + (max - min) * rng();
+const pick = ([min, max], rng) => min + (max - min) * rng();  // Đèn nằm dưới con trỏ (Raycaster)
 
 // Độ trễ từ lúc người dùng thao tác đến lúc đèn ở cách gateway `hops` hop đổi trạng thái.
 // oneWay = lệnh tới đèn (so với mục tiêu 50 ms). total = oneWay, hoặc khứ hồi khi ack = true
 // (lệnh đi + Status quay về app). `scale` = hệ số tải mạng (LOAD_PROFILES).
-export function simulateLatency({ hops, path = 'local', segments = 1, ack = false, scale = 1 }, rng = Math.random) {
+export function simulateLatency({ hops, path = 'local', segments = 1, ack = false, scale = 1 }, rng = Math.random) {  // Mô phỏng độ trễ một lệnh tới đèn ở `hops` bước
   const p = LATENCY_PROFILE;
   const breakdown = [];
   let oneWayParts = 0;

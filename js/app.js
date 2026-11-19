@@ -15,37 +15,33 @@ import {
   GATEWAY_FLOORPLAN_POS, FLOORS, FURNITURE, ROOM_PRESETS
 } from './data.js';
 import { FLOOR_PATTERNS, furnitureSvg } from './ui/furniture2d.js';
-import {
-  API_CATALOG, apiCallHistory, buildCurl, executeApiRequest, registerGlobalApi
-} from './api.js';
+import { executeApiRequest, registerGlobalApi } from './api.js';
 import { MAC_RE, SETTINGS_KEY, gatewayBaseUrl, resolveTheme, sanitizeSettings } from './settings.js';
 import { mountDevices } from './ui/devices.js';
-import { mountTestbench } from './ui/testbench.js';
 import { mountSettings } from './ui/settings.js';
+import { mountAccount } from './ui/account.js';
 
 const STORAGE_KEY = 'homemesh-mvp-v1';
 const THEME_KEY = 'homemesh_theme';
 const WELCOME_KEY = 'homemesh-welcome-seen';
-const GATEWAY_POS = { x: 50, y: 46 };
-const VIEW_TITLES = {
+const GATEWAY_POS = { x: 50, y: 46 };  // Vị trí gateway trên sơ đồ topology (màn hình Mạng Mesh)
+const VIEW_TITLES = {  // Nhãn nhỏ + tiêu đề của từng màn hình
   home: ['Nhà của tôi', 'Chiếu sáng'],
   devices: ['Quét & quản lý', 'Thiết bị'],
   scenes: ['Ngữ cảnh ánh sáng', 'Cảnh'],
-  test: ['Gửi lệnh & đo độ trễ', 'Điều khiển thử'],
   mesh: ['Gateway + BLE Mesh', 'Mạng Mesh & Jitter'],
-  api: ['REST & WebSocket Gateway', 'API Console'],
   log: ['Access message', 'Nhật ký gói tin'],
   settings: ['Tuỳ chỉnh ứng dụng', 'Cài đặt']
 };
-const views = {};
-// Màn hình đo & gỡ lỗi: mở từ Cài đặt → Kỹ thuật viên, không có trên thanh điều hướng.
-const TECH_VIEWS = new Set(['test', 'mesh', 'api', 'log']);
+const views = {};  // Nơi giữ 2 màn hình mount từ js/ui/ (devices, settings)
+// Trang phụ (Mạng Mesh, Nhật ký): mở từ Cài đặt → Mạng & gateway, không có trên thanh điều hướng.
+const TECH_VIEWS = new Set(['mesh', 'log']);
 const openRooms = new Set(); // phòng đang mở danh sách đèn
 
-const nextTid = createTidCounter();
-const roomById = new Map(ROOMS.map((r) => [r.id, r]));
+const nextTid = createTidCounter();  // Bộ đếm TID 0–255 cho mỗi gói (đèn bỏ gói lặp)
+const roomById = new Map(ROOMS.map((r) => [r.id, r]));  // Map id phòng → phòng, tra nhanh
 
-const state = {
+const state = {  // Toàn bộ trạng thái app trong một object
   view: 'home',
   path: 'local',
   gatewayOnline: true,
@@ -59,19 +55,18 @@ const state = {
   openLightId: null,
   appliedScene: null,
   provisionTarget: null,
-  activeApiIndex: 0,
   fpOptions: { glow: true, links: false, labels: true, mode: '2d' }
 };
 
-const $ = (sel, root = document) => root.querySelector(sel);
-const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
-const target = () => state.settings.targetLatencyMs;
-const readStorage = (key) => { try { return localStorage.getItem(key); } catch { return null; } };
-const escapeHtml = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const $ = (sel, root = document) => root.querySelector(sel);  // Viết tắt document.querySelector: tìm 1 phần tử
+const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));  // Viết tắt querySelectorAll, trả mảng
+const target = () => state.settings.targetLatencyMs;  // Mục tiêu độ trễ hiện tại (ms) trong cài đặt
+const readStorage = (key) => { try { return localStorage.getItem(key); } catch { return null; } };  // Đọc localStorage an toàn (trình duyệt chặn thì trả null)
+const escapeHtml = (v) => String(v).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));  // Đổi & < > " ' thành thực thể HTML trước khi ghép vào innerHTML
 
 // ---------------------------------------------------------------- Persistence
 
-function load() {
+function load() {  // Đọc đèn và cài đặt từ localStorage lúc mở app
   let saved = null;
   let savedSettings = null;
   try {
@@ -90,7 +85,7 @@ function load() {
   state.gatewayOnline = saved?.gatewayOnline ?? true;
 }
 
-function save() {
+function save() {  // Ghi đèn, đường truyền, gateway, cài đặt vào localStorage
   try {
     const lights = state.lights.map(({ hops, rssi, ping, lastPacket, identifyUntil, ...rest }) => rest);
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ lights, path: state.path, gatewayOnline: state.gatewayOnline }));
@@ -100,7 +95,7 @@ function save() {
   }
 }
 
-function withDerived(lights) {
+function withDerived(lights) {  // Thêm trường tính được: số hop, RSSI, toạ độ mặt bằng, firmware
   return computeHops(lights).map((l, i) => ({
     ...l,
     fx: l.fx ?? l.x,
@@ -114,7 +109,7 @@ function withDerived(lights) {
 
 const darkQuery = window.matchMedia?.('(prefers-color-scheme: dark)');
 
-function applyTheme() {
+function applyTheme() {  // Gắn data-theme lên <html>, đổi icon, màu thanh trình duyệt, class no-motion
   const theme = resolveTheme(state.settings.theme, darkQuery?.matches ?? true);
   state.theme = theme;
   document.documentElement.setAttribute('data-theme', theme);
@@ -125,7 +120,7 @@ function applyTheme() {
   document.documentElement.classList.toggle('no-motion', !state.settings.animations);
 }
 
-function toggleTheme() {
+function toggleTheme() {  // Đảo sáng / tối từ nút trên thanh trên
   updateSettings({ theme: state.theme === 'dark' ? 'light' : 'dark' });
   toast(`Đã chuyển sang giao diện ${state.theme === 'dark' ? 'Tối' : 'Sáng'}`);
 }
@@ -136,7 +131,6 @@ function updateSettings(patch) {
   save();
   applyTheme();
   renderGateway();
-  if (state.view === 'api') selectApiEndpoint(state.activeApiIndex);
   views.settings?.render();
   return state.settings;
 }
@@ -145,7 +139,7 @@ function updateSettings(patch) {
 
 let warnedFallback = false;
 
-function effectivePath() {
+function effectivePath() {  // Đường truyền thật sự dùng; gateway offline thì sang BLE Proxy
   if (!state.gatewayOnline && state.path !== 'proxy') {
     if (!warnedFallback) {
       toast('Gateway mất kết nối → tự chuyển sang BLE GATT Proxy');
@@ -159,7 +153,7 @@ function effectivePath() {
 
 // Gửi 1 access message tới `dst`; `targets` là các đèn sẽ nhận (unicast: 1 đèn, group: cả phòng).
 // Nếu ack = true, tính thêm độ trễ vòng lặp phản hồi (Round-Trip Response Time).
-function transmit({ bytes, dst, targets, record = true, animate = true, ack = false }) {
+function transmit({ bytes, dst, targets, record = true, animate = true, ack = false }) {  // Hàm gửi duy nhất: mọi lệnh tới đèn đều đi qua đây
   const path = effectivePath();
   const segments = segmentsNeeded(bytes.length);
   // Qua GATT Proxy: điện thoại kết nối node gần nhất nên bớt 1 hop so với gateway.
@@ -205,15 +199,15 @@ function transmit({ bytes, dst, targets, record = true, animate = true, ack = fa
   return { result, entry };
 }
 
-const throttleMap = new Map();
-function throttled(key, fn) {
+const throttleMap = new Map();  // Thời điểm gửi gần nhất theo từng khoá, dùng cho throttled()
+function throttled(key, fn) {  // Chỉ chạy hàm nếu đã qua throttleMs kể từ lần trước cùng khoá
   const now = performance.now();
   if (now - (throttleMap.get(key) ?? 0) < state.settings.throttleMs) return;
   throttleMap.set(key, now);
   fn();
 }
 
-function ctlBytes(light, ack) {
+function ctlBytes(light, ack) {  // Mã hoá Light CTL Set từ độ sáng % và Kelvin của đèn
   return encodeLightCtlSet({
     lightness: percentToLightnessActual(light.lightness),
     temperature: light.kelvin,
@@ -224,15 +218,15 @@ function ctlBytes(light, ack) {
 
 // ---------------------------------------------------------------- Actions
 
-function lightById(id) {
+function lightById(id) {  // Tìm đèn theo id
   return state.lights.find((l) => l.id === id);
 }
 
-function roomLights(roomId) {
+function roomLights(roomId) {  // Các đèn thuộc một phòng
   return state.lights.filter((l) => l.room === roomId);
 }
 
-function setLight(id, patch, { ack = true, send = true } = {}) {
+function setLight(id, patch, { ack = true, send = true } = {}) {  // Đổi một đèn (bật/tắt, độ sáng, màu) và gửi gói
   const light = lightById(id);
   if (!light) return;
   Object.assign(light, patch);
@@ -250,7 +244,7 @@ function setLight(id, patch, { ack = true, send = true } = {}) {
   refresh();
 }
 
-function setRoom(roomId, patch, { ack = true } = {}) {
+function setRoom(roomId, patch, { ack = true } = {}) {  // Đổi cả phòng bằng một gói tới địa chỉ group của phòng
   const lights = roomLights(roomId);
   if (lights.length === 0) return;
   lights.forEach((l) => Object.assign(l, patch));
@@ -264,7 +258,7 @@ function setRoom(roomId, patch, { ack = true } = {}) {
   refresh();
 }
 
-function setAllLights(on) {
+function setAllLights(on) {  // Bật / tắt cả nhà bằng 1 gói tới group 0xC000
   state.lights.forEach((l) => { l.on = on; });
   const { entry } = transmit({
     bytes: encodeOnOffSet({ on, tid: nextTid(), ack: false }),
@@ -277,7 +271,7 @@ function setAllLights(on) {
   toast(on ? 'Đã bật toàn bộ đèn trong nhà' : 'Đã tắt toàn bộ đèn trong nhà');
 }
 
-function recallScene(sceneId, scope) {
+function recallScene(sceneId, scope) {  // Gọi cảnh cho cả nhà hoặc một phòng (Scene Recall)
   const scene = SCENES.find((s) => s.id === sceneId);
   const lights = scope === 'all' ? state.lights : roomLights(scope);
   if (!scene || lights.length === 0) return;
@@ -306,7 +300,7 @@ function identifyLight(id, seconds = state.settings.attentionSeconds) {
   return entry;
 }
 
-function paintIdentify() {
+function paintIdentify() {  // Bật/tắt class identify cho đèn đang nháy ở mọi màn hình
   const now = Date.now();
   state.lights.forEach((l) => {
     const on = (l.identifyUntil ?? 0) > now;
@@ -314,7 +308,7 @@ function paintIdentify() {
   });
 }
 
-function renameLight(id, name) {
+function renameLight(id, name) {  // Đổi tên đèn (tối đa 40 ký tự)
   const light = lightById(id);
   const clean = String(name).trim().slice(0, 40);
   if (!light || !clean) return false;
@@ -344,7 +338,7 @@ function moveLight(id, roomId) {
 }
 
 // Xoá khỏi mạng: Config Node Reset. Đèn con đang relay qua nó được nối lên node cha.
-function removeLight(id) {
+function removeLight(id) {  // Xoá đèn khỏi mạng và nối lại các đèn con
   const light = lightById(id);
   if (!light) return false;
   transmit({ bytes: encodeNodeReset(), dst: light.unicast, targets: [light], ack: true });
@@ -357,46 +351,45 @@ function removeLight(id) {
   return true;
 }
 
-function rebuildAll() {
+function rebuildAll() {  // Tính lại hop, lưu và dựng lại mọi màn hình sau khi thêm / xoá đèn
   save();
   buildHome();
   if (state.view === 'home') buildFloorplan();
   if (state.view === 'mesh') { buildTopology(); renderNodeTable(); }
   views.devices?.render();
-  views.testbench?.renderTargets();
   paintIdentify();
 }
 
-function nextLightId() {
+function nextLightId() {  // Id kế tiếp dạng L<n>
   const nums = state.lights.map((l) => Number(String(l.id).replace(/\D/g, ''))).filter(Number.isFinite);
   return `L${(nums.length ? Math.max(...nums) : 0) + 1}`;
 }
 
 // ---------------------------------------------------------------- Rendering helpers
 
-function glow(light) {
+function glow(light) {  // Độ phát sáng 0–1 của bóng theo độ sáng
   return light.on ? (0.15 + (light.lightness / 100) * 0.85).toFixed(2) : 0;
 }
 
-function paintBulb(el, light) {
+function paintBulb(el, light) {  // Gán biến CSS --c (màu) và --g (độ sáng) cho bóng đèn
   el.style.setProperty('--c', kelvinToHex(light.kelvin));
   el.style.setProperty('--g', glow(light));
 }
 
-function latencyClass(ms) {
+function latencyClass(ms) {  // Class màu xanh / đỏ theo mục tiêu độ trễ
   return ms < target() ? 'lat-ok' : 'lat-bad';
 }
 
-function average(values) {
+function average(values) {  // Trung bình cộng
   return values.reduce((s, v) => s + v, 0) / (values.length || 1);
 }
 
-function isEditing(el) {
+function isEditing(el) {  // Phần tử đang được kéo / gõ thì không ghi đè giá trị
   return document.activeElement === el && el.matches('input[type="range"]');
 }
 
 let toastTimer;
-function toast(message) {
+function toast(message) {  // Hiện thông báo ngắn 2,4 giây
   const el = $('#toast');
   el.textContent = message;
   el.classList.add('show');
@@ -404,7 +397,7 @@ function toast(message) {
   toastTimer = setTimeout(() => el.classList.remove('show'), 2400);
 }
 
-function refresh() {
+function refresh() {  // Lưu rồi vẽ lại những gì đang hiện trên màn hình
   save();
   updateHome();
   if (state.openLightId) updateSheet();
@@ -416,7 +409,7 @@ function refresh() {
 
 // ---------------------------------------------------------------- Top bar & navigation
 
-function setView(view) {
+function setView(view) {  // Chuyển màn hình: đổi class is-active và vẽ màn hình mới
   if (view === 'floorplan') view = 'home'; // link cũ ?view=floorplan
   if (!(view in VIEW_TITLES)) view = 'home';
   state.view = view;
@@ -434,20 +427,18 @@ function setView(view) {
   }
   if (view === 'scenes') updateScenes();
   if (view === 'mesh') { buildTopology(); renderMeshStats(); renderNodeTable(); }
-  if (view === 'api') buildApiConsole();
   if (view === 'log') renderLog();
   if (view === 'devices') views.devices?.render();
-  if (view === 'test') views.testbench?.render();
   if (view === 'settings') views.settings?.render();
   paintIdentify();
   window.scrollTo({ top: 0 });
 }
 
-function renderPathControl() {
+function renderPathControl() {  // Tô nút đường truyền đang chọn
   $$('#path-control button').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.path === state.path)));
 }
 
-function renderLatencyPill() {
+function renderLatencyPill() {  // Viên độ trễ lệnh gần nhất (trong Cài đặt → Mạng & gateway)
   const pill = $('#latency-pill');
   const last = state.lastResult;
   pill.classList.toggle('is-idle', !last);
@@ -456,7 +447,7 @@ function renderLatencyPill() {
   pill.title = `Độ trễ một chiều của lệnh gần nhất (mục tiêu < ${target()} ms)`;
 }
 
-function renderGateway() {
+function renderGateway() {  // Ô trạng thái gateway ở thanh điều hướng
   $('#nav-gateway').classList.toggle('is-offline', !state.gatewayOnline);
   $('#nav-gateway-name').textContent = `Gateway ${state.settings.gatewayName}`;
   $('#nav-gateway-text').textContent = state.gatewayOnline ? `Online · ${state.settings.gatewayHost}` : 'Offline · dùng BLE Proxy';
@@ -488,7 +479,7 @@ function activePreset(roomId) {
   return (ROOM_PRESETS[roomId] || []).find((p) => lights.every((l) => l.kelvin === p.kelvin && l.lightness === p.lightness))?.id ?? null;
 }
 
-function applyRoomPreset(roomId, presetId) {
+function applyRoomPreset(roomId, presetId) {  // Áp một kiểu sáng có sẵn cho cả phòng
   const preset = (ROOM_PRESETS[roomId] || []).find((p) => p.id === presetId);
   const room = roomById.get(roomId);
   if (!preset || !room) return;
@@ -505,7 +496,7 @@ function focusRoom(roomId) {
   setTimeout(() => card.classList.remove('is-focus'), 1400);
 }
 
-function buildHome() {
+function buildHome() {  // Dựng lại HTML các thẻ phòng (khi danh sách đèn đổi)
   $('#rooms').innerHTML = ROOMS.map((room) => {
     const lights = roomLights(room.id);
     const presets = ROOM_PRESETS[room.id] || [];
@@ -547,7 +538,7 @@ function buildHome() {
   updateHome();
 }
 
-function updateHome() {
+function updateHome() {  // Đổ giá trị hiện tại vào thẻ phòng có sẵn (không dựng lại, không mất focus khi kéo)
   const on = state.lights.filter((l) => l.on);
   const watts = state.lights.reduce((sum, l) => sum + estimatePowerW(l.watts, l.on, l.lightness), 0);
   const litRooms = ROOMS.filter((r) => roomLights(r.id).some((l) => l.on)).length;
@@ -599,7 +590,7 @@ function updateHome() {
   });
 }
 
-function bindHome() {
+function bindHome() {  // Gắn sự kiện cho các thẻ phòng (một lần, kiểu event delegation)
   const rooms = $('#rooms');
   rooms.addEventListener('click', (e) => {
     const open = e.target.closest('[data-open]');
@@ -653,7 +644,7 @@ function bindHome() {
 
 // ---------------------------------------------------------------- 2. Sơ đồ Mặt bằng Nhà (Floorplan)
 
-function buildFloorplan() {
+function buildFloorplan() {  // Vẽ toàn bộ sơ đồ 2D bằng SVG theo từng lớp
   const svg = $('#floorplan-svg');
 
   // 1. Defs Radial Gradients cho quầng sáng CCT từng đèn
@@ -752,7 +743,7 @@ function roomBrightness(roomId) {
   return Math.min(1, (lights.reduce((s, l) => s + (l.on ? l.lightness / 100 : 0), 0) / lights.length) * 1.4);
 }
 
-function updateFloorplan() {
+function updateFloorplan() {  // Cập nhật màu, độ tối phòng, nhãn trên sơ đồ 2D và gọi 3D sync()
   ROOMS.forEach((r) => {
     const shade = $(`#floorplan-svg [data-shade="${r.id}"]`);
     if (shade) shade.style.opacity = (0.62 * (1 - roomBrightness(r.id))).toFixed(2);
@@ -783,7 +774,7 @@ function updateFloorplan() {
   });
 }
 
-function flashFloorplan(targets) {
+function flashFloorplan(targets) {  // Hiệu ứng gói tin chạy tới đèn trên sơ đồ
   fp3d.api?.flash(targets);
   const svg = $('#floorplan-svg');
   if (!svg) return;
@@ -802,7 +793,7 @@ function flashFloorplan(targets) {
   });
 }
 
-function bindFloorplan() {
+function bindFloorplan() {  // Gắn sự kiện sơ đồ: bấm đèn, bấm tên phòng, công tắc hiển thị, 2D/3D, ngày/đêm
   $('#floorplan-svg').addEventListener('click', (e) => {
     const fixture = e.target.closest('[data-fp-light]');
     if (!fixture) {
@@ -866,9 +857,9 @@ function bindFloorplan() {
 
 // ---------------------------------------------------------------- 2b. Mô hình 3D (tải khi cần)
 const FP_MODE_KEY = 'homemesh-fp-mode';
-const fp3d = { api: null, loading: null };
+const fp3d = { api: null, loading: null };  // Giữ API mô hình 3D sau khi tải ({ sync, flash, … })
 
-function setFloorplanMode(mode, { quiet = false, lazy = false } = {}) {
+function setFloorplanMode(mode, { quiet = false, lazy = false } = {}) {  // Chuyển 2D / 3D; lần đầu vào 3D thì tải module 3D
   state.fpOptions.mode = mode;
   try { localStorage.setItem(FP_MODE_KEY, mode); } catch { /* bỏ qua */ }
   $$('#fp-mode [data-mode]').forEach((b) => b.setAttribute('aria-checked', String(b.dataset.mode === mode)));
@@ -899,10 +890,10 @@ function setFloorplanMode(mode, { quiet = false, lazy = false } = {}) {
     .finally(() => { $('#fp3d-loading').hidden = true; });
 }
 
-// ---------------------------------------------------------------- Kiểm tra gateway (Kỹ thuật viên)
+// ---------------------------------------------------------------- Kiểm tra gateway (Cài đặt → Mạng & gateway)
 
 // Trả danh sách { ok, label, detail } để màn hình Cài đặt hiển thị.
-function checkGateway() {
+function checkGateway() {  // Kiểm tra gateway: địa chỉ, MAC, REST API, node trong tầm, độ trễ
   const s = state.settings;
   const checks = [
     { ok: true, label: 'Địa chỉ API', detail: `${gatewayBaseUrl(s)}/api/v1` },
@@ -929,7 +920,7 @@ function checkGateway() {
 
 // ---------------------------------------------------------------- 3. Device Sheet
 
-function openSheet(id) {
+function openSheet(id) {  // Mở hộp chi tiết đèn
   state.openLightId = id;
   $('#sheet-presets').innerHTML = CCT_PRESETS.map((p) =>
     `<button type="button" class="chip" data-kelvin="${p.kelvin}" title="${p.hint}"><i style="--c:${kelvinToHex(p.kelvin)}"></i>${p.label} ${p.kelvin}K</button>`
@@ -938,7 +929,7 @@ function openSheet(id) {
   $('#device-sheet').showModal();
 }
 
-function updateSheet() {
+function updateSheet() {  // Đổ giá trị đèn vào hộp chi tiết
   const light = lightById(state.openLightId);
   if (!light) return;
   const hex = kelvinToHex(light.kelvin);
@@ -980,7 +971,7 @@ function updateSheet() {
   out.className = pkt ? latencyClass(pkt.latency) : '';
 }
 
-function bindSheet() {
+function bindSheet() {  // Gắn sự kiện hộp chi tiết đèn
   const sheet = $('#device-sheet');
   sheet.addEventListener('close', () => { state.openLightId = null; });
   sheet.addEventListener('click', (e) => { if (e.target === sheet) sheet.close(); });
@@ -1007,7 +998,7 @@ function bindSheet() {
 
 // ---------------------------------------------------------------- 4. Scenes
 
-function buildScenes() {
+function buildScenes() {  // Dựng thẻ cảnh và ô phạm vi
   $('#scene-scope').innerHTML = `<option value="all">Toàn nhà (${formatAddress(ADDRESS.GROUP_ALL_LIGHTS)})</option>` +
     ROOMS.map((r) => `<option value="${r.id}">${r.name} (${formatAddress(r.group)})</option>`).join('');
 
@@ -1025,19 +1016,19 @@ function buildScenes() {
   });
 }
 
-function updateScenes() {
+function updateScenes() {  // Tô cảnh đang áp dụng
   $$('#scene-grid .scene').forEach((el) => el.classList.toggle('is-applied', Number(el.dataset.scene) === state.appliedScene));
 }
 
 // ---------------------------------------------------------------- 5. Mesh & Jitter Simulation
 
-function positionOf(id) {
+function positionOf(id) {  // Toạ độ node trên sơ đồ topology
   if (id === 'gateway') return GATEWAY_POS;
   const l = lightById(id);
   return l ? { x: l.x, y: l.y } : GATEWAY_POS;
 }
 
-function buildTopology() {
+function buildTopology() {  // Vẽ sơ đồ mạng mesh SVG
   const svg = $('#topology');
   const links = state.lights.map((l) => {
     const a = positionOf(l.via);
@@ -1059,14 +1050,14 @@ function buildTopology() {
   updateTopology();
 }
 
-function updateTopology() {
+function updateTopology() {  // Cập nhật màu node
   state.lights.forEach((l) => {
     const core = $(`#topology [data-node="${l.id}"] .node-core`);
     if (core) core.setAttribute('fill', l.on ? kelvinToHex(l.kelvin) : '#3a4250');
   });
 }
 
-function flashTopology(targets, path) {
+function flashTopology(targets, path) {  // Hiệu ứng gói chạy trên topology
   const svg = $('#topology');
   if (!svg) return;
   const pulse = $('.pulse', svg);
@@ -1093,7 +1084,7 @@ function flashTopology(targets, path) {
   });
 }
 
-function renderMeshStats() {
+function renderMeshStats() {  // Ô thống kê độ trễ / jitter
   const s = latencyStats(state.samples, target());
   const r = latencyStats(state.rttSamples, Infinity);
   const last = state.lastResult;
@@ -1118,7 +1109,7 @@ function renderMeshStats() {
   renderBreakdown();
 }
 
-function renderSparkline() {
+function renderSparkline() {  // Biểu đồ nhỏ độ trễ
   const svg = $('#sparkline');
   const data = state.samples.slice(-80);
   const W = 300;
@@ -1139,7 +1130,7 @@ function renderSparkline() {
     <text x="4" y="${thr - 4}">${target()} ms</text>`;
 }
 
-function renderBreakdown() {
+function renderBreakdown() {  // Phân rã từng chặng của lệnh gần nhất
   const last = state.lastResult;
   const box = $('#breakdown');
   if (!last?.slowest) {
@@ -1160,7 +1151,7 @@ function renderBreakdown() {
     (slow.isAck ? `<div class="bd-row bd-total"><span>Khứ hồi (Status về app)</span><b>${slow.total} ms</b></div>` : '');
 }
 
-function renderNodeTable() {
+function renderNodeTable() {  // Bảng node mesh
   $('#node-count').textContent = `${state.lights.length} node · TTL ${state.settings.ttl} · tối đa ${state.settings.ttl} hop`;
   $('#node-table tbody').innerHTML = state.lights.map((l) => {
     const room = roomById.get(l.room);
@@ -1180,7 +1171,7 @@ function renderNodeTable() {
   }).join('');
 }
 
-function pingAll() {
+function pingAll() {  // Ping mọi node
   const path = effectivePath();
   state.lights.forEach((l) => {
     const { result } = transmit({ bytes: encodeOnOffGet(), dst: l.unicast, targets: [l], record: false, animate: false, ack: true });
@@ -1250,7 +1241,7 @@ async function stressTest(button) {
   button.disabled = false;
 }
 
-function clearMetrics() {
+function clearMetrics() {  // Xoá số đo và nhật ký
   state.samples = [];
   state.rttSamples = [];
   state.lastResult = null;
@@ -1261,7 +1252,7 @@ function clearMetrics() {
   if (state.view === 'log') renderLog();
 }
 
-function bindMesh() {
+function bindMesh() {  // Gắn sự kiện màn hình Mesh
   $('#btn-ping').addEventListener('click', pingAll);
   $('#btn-sim-sweep').addEventListener('click', (e) => simulateSweep(e.currentTarget));
   $('#btn-sim-circadian').addEventListener('click', (e) => simulateCircadian(e.currentTarget));
@@ -1280,122 +1271,18 @@ function bindMesh() {
   $('#btn-provision').addEventListener('click', openProvisioning);
 }
 
-// ---------------------------------------------------------------- 6. API Gateway Console
+// ---------------------------------------------------------------- 6. REST API (dùng cho kiểm tra gateway và window.HomeMeshAPI)
 
-function buildApiConsole() {
-  const list = $('#api-catalog-list');
-  list.innerHTML = API_CATALOG.map((item, index) => `
-    <div class="api-endpoint-card${state.activeApiIndex === index ? ' is-active' : ''}" data-api-index="${index}">
-      <span class="method-badge ${item.method.toLowerCase()}">${item.method}</span>
-      <div class="api-endpoint-info">
-        <strong>${item.path}</strong>
-        <small>${item.description}</small>
-      </div>
-    </div>`).join('');
-
-  selectApiEndpoint(state.activeApiIndex);
-  renderApiLogTable();
-}
-
-function selectApiEndpoint(index) {
-  state.activeApiIndex = index;
-  const item = API_CATALOG[index];
-  if (!item) return;
-
-  $$('#api-catalog-list .api-endpoint-card').forEach((card, idx) => {
-    card.classList.toggle('is-active', idx === index);
-  });
-
-  $('#api-req-method-path').textContent = `${item.method} ${item.path}`;
-  $('#api-request-body').value = item.sampleBody ? JSON.stringify(item.sampleBody, null, 2) : '';
-  $('#api-request-body').placeholder = item.sampleBody ? 'JSON Request Body...' : 'Endpoint này không yêu cầu Request Body (GET)';
-  $('#api-curl-code').textContent = buildCurl(item, gatewayBaseUrl(state.settings));
-}
-
-function runApiCall() {
-  const item = API_CATALOG[state.activeApiIndex];
-  if (!item) return;
-
-  let body = null;
-  const rawBody = $('#api-request-body').value.trim();
-  if (rawBody && item.method !== 'GET') {
-    try {
-      body = JSON.parse(rawBody);
-    } catch (e) {
-      toast(`Request Body không phải JSON hợp lệ: ${e.message}`);
-      return;
-    }
-  }
-
-  const res = executeApiRequest({
-    method: item.method,
-    path: item.path,
-    body,
-    context: apiContext()
-  });
-
-  const resStatus = $('#api-res-status');
-  resStatus.textContent = `${res.status} ${res.statusText}`;
-  resStatus.className = `status-pill ${res.status >= 200 && res.status < 300 ? 'ok' : 'err'}`;
-  $('#api-res-time').textContent = `${res.timeMs} ms`;
-  $('#api-response-code').textContent = JSON.stringify(res.body, null, 2);
-
-  renderApiLogTable();
-  refresh();
-}
-
-function apiContext() {
+function apiContext() {  // Các hàm điều khiển cho js/api.js gọi
   return {
     state, lightById, roomLights, setLight, setRoom, recallScene, latencyStats,
     SCENES, NEW_DEVICE_CANDIDATES, quickProvision, removeLight, identifyLight
   };
 }
 
-function renderApiLogTable() {
-  const tbody = $('#api-log-table tbody');
-  $('#api-log-empty').hidden = apiCallHistory.length > 0;
-  tbody.innerHTML = apiCallHistory.map((h) => {
-    const timeStr = h.timestamp.toLocaleTimeString('vi-VN', { hour12: false }) + '.' + String(h.timestamp.getMilliseconds()).padStart(3, '0');
-    const msg = h.body?.message || (h.body?.ok ? 'Thành công' : h.body?.error || '—');
-    return `<tr>
-      <td>${timeStr}</td>
-      <td><span class="method-badge ${h.method.toLowerCase()}">${h.method}</span></td>
-      <td>${h.path}</td>
-      <td><span class="status-pill ${h.status < 300 ? 'ok' : 'err'}">${h.status}</span></td>
-      <td>${h.timeMs} ms</td>
-      <td>${msg}</td>
-    </tr>`;
-  }).join('');
-}
-
-function bindApiConsole() {
-  $('#api-catalog-list').addEventListener('click', (e) => {
-    const card = e.target.closest('[data-api-index]');
-    if (card) selectApiEndpoint(Number(card.dataset.apiIndex));
-  });
-
-  $('#btn-run-api').addEventListener('click', runApiCall);
-  $('#btn-run-api-bottom').addEventListener('click', runApiCall);
-
-  $('#btn-reset-api-body').addEventListener('click', () => {
-    const item = API_CATALOG[state.activeApiIndex];
-    if (item) $('#api-request-body').value = item.sampleBody ? JSON.stringify(item.sampleBody, null, 2) : '';
-  });
-
-  $('#btn-copy-curl').addEventListener('click', () => {
-    copyText($('#api-curl-code').textContent, 'Đã sao chép lệnh cURL');
-  });
-
-  $('#btn-clear-api-log').addEventListener('click', () => {
-    apiCallHistory.length = 0;
-    renderApiLogTable();
-    toast('Đã xoá lịch sử gọi API.');
-  });
-}
-
 // ---------------------------------------------------------------- 7. Provisioning Flow
 
-function quickProvision(target, roomId, name) {
+function quickProvision(target, roomId, name) {  // Tạo đèn mới sau 7 bước provisioning
   const room = roomById.get(roomId) || ROOMS[0];
   const unicast = Math.max(1, ...state.lights.map((l) => l.unicast)) + 1;
   const parent = roomLights(room.id).find((l) => l.relay) ?? state.lights.find((l) => l.relay && l.hops === 1);
@@ -1444,7 +1331,7 @@ function openProvisioning(device = null) {
   if (device) chooseProvisionTarget(device);
 }
 
-function chooseProvisionTarget(device) {
+function chooseProvisionTarget(device) {  // Chọn thiết bị, sang bước đặt tên / phòng
   state.provisionTarget = device;
   $('#prov-title').textContent = device.model;
   $('#prov-meta').textContent = `UUID ${device.uuid} · ${device.rssi} dBm · firmware ${device.fw ?? DEFAULT_FIRMWARE} · ${device.oob ?? 'Static OOB'}`;
@@ -1454,7 +1341,7 @@ function chooseProvisionTarget(device) {
   $('#prov-name').focus();
 }
 
-function bindProvisioning() {
+function bindProvisioning() {  // Chạy 7 bước provisioning
   const dialog = $('#provision-dialog');
   dialog.addEventListener('click', (e) => { if (e.target === dialog) dialog.close(); });
 
@@ -1486,7 +1373,7 @@ function bindProvisioning() {
 
 // ---------------------------------------------------------------- 8. Log
 
-function renderLog() {
+function renderLog() {  // Bảng nhật ký gói tin
   const fmt = (d) => d.toLocaleTimeString('vi-VN', { hour12: false }) + '.' + String(d.getMilliseconds()).padStart(3, '0');
   $('#log-empty').hidden = state.log.length > 0;
   $('#log-table tbody').innerHTML = state.log.map((e) => `<tr>
@@ -1501,7 +1388,7 @@ function renderLog() {
   </tr>`).join('');
 }
 
-function bindLog() {
+function bindLog() {  // Nút xuất JSON / xoá nhật ký
   $('#btn-clear-log').addEventListener('click', () => { state.log = []; renderLog(); });
   $('#btn-export').addEventListener('click', () => {
     const blob = new Blob([JSON.stringify(state.log, null, 2)], { type: 'application/json' });
@@ -1517,7 +1404,7 @@ function bindLog() {
 
 // ---------------------------------------------------------------- Tiện ích chung cho các màn hình
 
-function copyText(text, message) {
+function copyText(text, message) {  // Chép vào clipboard
   const done = () => toast(message);
   if (navigator.clipboard?.writeText) navigator.clipboard.writeText(text).then(done, () => toast('Không sao chép được — hãy chọn và copy thủ công'));
   else toast('Trình duyệt không cho sao chép tự động');
@@ -1543,7 +1430,7 @@ function confirmAsk(title, message, okLabel = 'Xác nhận') {
   });
 }
 
-function downloadJson(data, filename) {
+function downloadJson(data, filename) {  // Tải object thành file .json
   const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
@@ -1552,12 +1439,12 @@ function downloadJson(data, filename) {
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
-function replaceLights(lights) {
+function replaceLights(lights) {  // Thay toàn bộ đèn (khôi phục từ file)
   state.lights = withDerived(lights.map(({ hops, rssi, ...l }) => l));
   rebuildAll();
 }
 
-function resetAll() {
+function resetAll() {  // Xoá hết về mặc định
   try {
     [STORAGE_KEY, SETTINGS_KEY, THEME_KEY].forEach((k) => localStorage.removeItem(k));
   } catch { /* bỏ qua */ }
@@ -1571,21 +1458,21 @@ function resetAll() {
   renderGateway();
 }
 
-function context() {
+function context() {  // Gói các hàm / dữ liệu app.js cho module js/ui/ dùng (tránh import vòng)
   return {
     state, $, $$, toast, escapeHtml, target, transmit, nextTid,
     lightById, roomLights, roomById, setLight, setRoom, recallScene, checkGateway,
     identifyLight, paintIdentify, renameLight, moveLight, removeLight, openProvisioning,
     refresh, rebuildAll, replaceLights, resetAll, clearMetrics, updateSettings,
-    confirmAsk, copyText, downloadJson, latencyClass, effectivePath, showWelcome
+    confirmAsk, copyText, downloadJson, latencyClass, effectivePath, showWelcome, setView
   };
 }
 
-function showWelcome() {
+function showWelcome() {  // Mở hộp hướng dẫn
   $('#welcome-dialog').showModal();
 }
 
-function bindShell() {
+function bindShell() {  // Điều hướng, nút theme, nút ← Cài đặt, hộp hướng dẫn
   $$('.nav-item[data-view], .more-item').forEach((b) => b.addEventListener('click', () => setView(b.dataset.view)));
   $('#back-settings').addEventListener('click', () => setView('settings'));
   $('#theme-toggle').addEventListener('click', toggleTheme);
@@ -1601,7 +1488,7 @@ function bindShell() {
   });
 }
 
-function init() {
+function init() {  // Chạy một lần khi trang mở
   load();
   applyTheme();
   registerGlobalApi(apiContext());
@@ -1620,14 +1507,13 @@ function init() {
   bindFloorplan();
   bindSheet();
   bindMesh();
-  bindApiConsole();
   bindProvisioning();
   bindLog();
 
   const ctx = context();
   views.devices = mountDevices(ctx);
-  views.testbench = mountTestbench(ctx);
   views.settings = mountSettings(ctx);
+  mountAccount(ctx);  // Avatar + thẻ Tài khoản (đăng xuất, đổi mật khẩu)
 
   buildHome();
   buildScenes();

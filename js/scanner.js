@@ -9,7 +9,7 @@ export const SCAN_DURATION_MS = 6000;
 
 // Lên lịch "thấy" từng thiết bị trong một lượt quét mô phỏng.
 // Tín hiệu mạnh được thấy sớm hơn; RSSI dao động ±4 dBm mỗi lượt.
-export function planScan(pool, takenUuids, rng = Math.random, durationMs = SCAN_DURATION_MS) {
+export function planScan(pool, takenUuids, rng = Math.random, durationMs = SCAN_DURATION_MS) {  // Lên lịch "thấy" từng thiết bị trong một lượt quét mô phỏng
   const taken = new Set(takenUuids);
   return pool
     .filter((d) => !taken.has(d.uuid))
@@ -31,7 +31,7 @@ export function rssiBars(rssi) {
   return 0;
 }
 
-export function rssiLabel(rssi) {
+export function rssiLabel(rssi) {  // Tên mức tín hiệu
   return ['Rất yếu', 'Yếu', 'Trung bình', 'Tốt', 'Rất tốt'][rssiBars(rssi)];
 }
 
@@ -46,7 +46,7 @@ export function webBluetoothSupport(nav, isSecure) {
 
 // Mở hộp thoại chọn thiết bị của trình duyệt, lọc theo dịch vụ BLE Mesh.
 // Chỉ đọc tên/ID để hiển thị — MVP không provisioning qua Web Bluetooth.
-export async function requestMeshDevice(nav, { acceptAll = false } = {}) {
+export async function requestMeshDevice(nav, { acceptAll = false } = {}) {  // Mở hộp thoại chọn thiết bị của trình duyệt, lọc theo dịch vụ BLE Mesh
   const options = acceptAll
     ? { acceptAllDevices: true }
     : { filters: [{ services: [MESH_PROVISIONING_SERVICE] }, { services: [MESH_PROXY_SERVICE] }] };

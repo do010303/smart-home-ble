@@ -16,11 +16,11 @@ Web app (cài được như ứng dụng điện thoại) cho hệ thống chi�
 | Thiết bị | **Quét** đèn mới (radar, cường độ tín hiệu), **thêm** vào phòng qua provisioning 7 bước, **nháy nhận diện**, **đổi tên / chuyển phòng / xoá** khỏi mạng; thử **Bluetooth thật** của máy qua Web Bluetooth |
 | Chi tiết đèn | Slider gradient 2700–6500 K, preset, PWM kênh ấm/lạnh, công suất, gói tin hex, nháy nhận diện |
 | Cảnh | 6 cảnh, gọi cho toàn nhà hoặc từng phòng (Scene Recall) |
-| Cài đặt → Kỹ thuật viên | Gateway (IP, cổng, MAC), đường truyền, TTL, **kiểm tra gateway** (API, MAC, node, độ trễ) và 4 công cụ đo bên dưới |
-| ↳ Điều khiển thử | Soạn lệnh (8 loại: OnOff, Lightness, CTL, quét màu, Scene, Get, Identify…), chọn đích đèn / phòng / toàn nhà, **xem trước gói tin**, chạy lặp tới 200 lần, đo độ trễ một chiều và khứ hồi, kết luận Đạt / Chưa đạt; 4 bài thử nhanh |
+| Cài đặt → Mạng & gateway | Gateway (IP, cổng, MAC), đường truyền, TTL, **kiểm tra gateway** (API, MAC, node, độ trễ) và 2 công cụ đo bên dưới; REST API mô phỏng gọi được từ DevTools qua `window.HomeMeshAPI` |
 | ↳ Mạng Mesh | Sơ đồ topology có hiệu ứng lan gói, độ trễ **một chiều** (so với mục tiêu) tách riêng với **khứ hồi** (lệnh có Ack), jitter, stress test, ping, mô phỏng mất gateway |
-| ↳ API Gateway | Console REST v1 (GET, PUT, POST, DELETE), lệnh cURL theo địa chỉ gateway trong Cài đặt, gọi được từ DevTools qua `window.HomeMeshAPI` |
 | ↳ Nhật ký | Access message thật (opcode, payload little-endian, segment, TTL), xuất JSON |
+| Đăng nhập | Trang `login.html`: đăng nhập, đăng ký, quên mật khẩu (mã 6 số qua hộp thư giả lập); tài khoản demo `demo@homemesh.vn` / `homemesh123` |
+| Cài đặt → Tài khoản | Đổi tên, **đổi mật khẩu**, đăng xuất, xoá tài khoản |
 | Cài đặt | Chủ đề Sáng / Tối / theo hệ thống; sao lưu / khôi phục ra file; khôi phục mặc định; cài làm ứng dụng; sao chép link chia sẻ |
 
 Có 3 đường truyền để so sánh: **LAN** (gateway), **BLE** (GATT Proxy), **Cloud**.
@@ -31,8 +31,7 @@ Có 3 đường truyền để so sánh: **LAN** (gateway), **BLE** (GATT Proxy)
 2. **Nhà của tôi** → ở thẻ Phòng khách bấm **Đón khách**, rồi kéo thanh **Màu ánh sáng** để thấy đèn đổi từ vàng ấm sang trắng.
 3. Bấm **3D** trên sơ đồ → kéo để xoay căn hộ, bấm một đèn trên trần để bật/tắt.
 4. **Thiết bị** → **Bắt đầu quét** → bấm **Thêm** ở một đèn tìm thấy → đặt tên, chọn phòng → **Bắt đầu provisioning**.
-5. **Cài đặt → Kỹ thuật viên → Điều khiển thử** → chọn đích và lệnh → **Chạy thử** → xem độ trễ có đạt dưới 50 ms không.
-6. **Cài đặt → Kỹ thuật viên** → bấm **Kiểm tra MAC & API**; đổi TTL xuống 2 để thấy các đèn ở xa 3 hop bị cảnh báo vượt tầm.
+5. **Cài đặt → Mạng & gateway** → bấm **Kiểm tra MAC & API** → xem độ trễ tới đèn xa nhất có dưới 50 ms không; đổi TTL xuống 2 để thấy các đèn ở xa 3 hop bị cảnh báo vượt tầm.
 
 Dữ liệu (đèn đã thêm, cài đặt) lưu trong trình duyệt của từng người — mỗi người mở link có một "ngôi nhà" riêng, không ảnh hưởng nhau.
 
@@ -50,23 +49,25 @@ Sau khi cài, app mở toàn màn hình và vẫn chạy khi mất mạng.
 ```text
 smart-home-ble/
 ├── index.html
+├── login.html        # đăng nhập, đăng ký, quên mật khẩu
 ├── css/style.css
 ├── js/
 │   ├── app.js        # state, điều hướng, điều khiển đèn, các màn hình gốc
 │   ├── api.js        # REST API Gateway mô phỏng + window.HomeMeshAPI
+│   ├── auth.js       # tài khoản: băm mật khẩu, phiên, mã khôi phục
 │   ├── cct.js        # màu & driver (Kelvin → RGB, trộn PWM, công suất)
 │   ├── mesh.js       # gói tin BLE Mesh, mô hình độ trễ một chiều / khứ hồi, jitter
 │   ├── data.js       # phòng, đèn, toạ độ mặt bằng, cảnh, thiết bị quét được
 │   ├── scanner.js    # lịch quét mô phỏng, cường độ tín hiệu, Web Bluetooth
-│   ├── testbench.js  # mã hoá lệnh cho màn hình Điều khiển thử
 │   ├── settings.js   # cài đặt mặc định, kiểm tra hợp lệ, sao lưu / khôi phục
 │   ├── vendor/three.module.min.js  # Three.js r160 (MIT) cho mô hình 3D
 │   └── ui/
 │       ├── furniture2d.js # nội thất & sàn trên sơ đồ 2D
 │       ├── floorplan3d.js # mô hình 3D căn hộ, đèn chiếu sáng thật
 │       ├── devices.js    # màn hình Thiết bị
-│       ├── testbench.js  # màn hình Điều khiển thử
-│       └── settings.js   # màn hình Cài đặt
+│       ├── settings.js   # màn hình Cài đặt
+│       ├── account.js    # thẻ Tài khoản, đổi mật khẩu, đăng xuất
+│       └── login.js      # script của login.html
 ├── assets/           # biểu tượng ứng dụng
 ├── manifest.webmanifest  # khai báo PWA (cài như app)
 ├── sw.js             # service worker: dùng offline
@@ -77,7 +78,9 @@ smart-home-ble/
 │   ├── BLE_MESH_SPEC.md  # địa chỉ, model, opcode, driver PWM
 │   ├── UI_UX.md          # màn hình, nguyên tắc, design tokens
 │   └── TEST_CASES.md
-└── tests/model_test.mjs
+└── tests/
+    ├── model_test.mjs
+    └── auth_test.mjs
 ```
 
 ## Chạy local
@@ -131,9 +134,10 @@ Cần Node.js 18 trở lên.
 
 ```bash
 node tests/model_test.mjs
+node tests/auth_test.mjs
 ```
 
-31 test: màu & PWM, mã hoá gói tin (gồm Health Attention, Node Reset, Subscription Overwrite), độ trễ một chiều / khứ hồi, quét thiết bị, cài đặt và sao lưu, lệnh điều khiển thử, API, vị trí nội thất, kiểu sáng theo phòng, MAC gateway.
+30 + 10 test. Tài khoản: email/mật khẩu hợp lệ, không lưu mật khẩu thô, phiên hết hạn, khoá sau 5 lần sai, quên mật khẩu bằng mã, đổi mật khẩu, xoá tài khoản. Còn lại: màu & PWM, mã hoá gói tin (gồm Health Attention, Node Reset, Subscription Overwrite), độ trễ một chiều / khứ hồi, quét thiết bị, cài đặt và sao lưu, API, vị trí nội thất, kiểu sáng theo phòng, MAC gateway.
 
 Test thủ công: `docs/TEST_CASES.md`.
 

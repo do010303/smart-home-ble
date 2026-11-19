@@ -2,11 +2,11 @@
 
 import { LOAD_PROFILES, PATHS } from './mesh.js';
 
-export const APP_VERSION = '1.2.0';
+export const APP_VERSION = '1.3.0';
 export const SETTINGS_KEY = 'homemesh-settings-v1';
 export const BACKUP_FORMAT = 'homemesh-backup';
 
-export const DEFAULT_SETTINGS = Object.freeze({
+export const DEFAULT_SETTINGS = Object.freeze({  // Giá trị cài đặt mặc định
   theme: 'system',            // system | dark | light
   gatewayName: 'GW-01',
   gatewayHost: '192.168.1.100',
@@ -31,11 +31,11 @@ export const SETTING_RANGES = Object.freeze({
   attentionSeconds: [1, 30]
 });
 
-const THEMES = ['system', 'dark', 'light'];
+const THEMES = ['system', 'dark', 'light'];  // Các chủ đề hợp lệ
 const HOST_RE = /^[a-zA-Z0-9.-]{1,253}$/;
 export const MAC_RE = /^([0-9A-F]{2}[:-]){5}[0-9A-F]{2}$/i;
 
-const clampInt = (value, [min, max], fallback) => {
+const clampInt = (value, [min, max], fallback) => {  // Làm tròn và kẹp số nguyên
   const n = Math.round(Number(value));
   return Number.isFinite(n) ? Math.min(max, Math.max(min, n)) : fallback;
 };
@@ -61,7 +61,7 @@ export function sanitizeSettings(raw) {
   return out;
 }
 
-export function gatewayBaseUrl(settings) {
+export function gatewayBaseUrl(settings) {  // http://<host>:<port>
   return `http://${settings.gatewayHost}:${settings.gatewayPort}`;
 }
 
@@ -76,7 +76,7 @@ export function buildBackup({ settings, lights, now = new Date() }) {
   };
 }
 
-const LIGHT_FIELDS = ['id', 'name', 'room', 'unicast', 'watts', 'via'];
+const LIGHT_FIELDS = ['id', 'name', 'room', 'unicast', 'watts', 'via'];  // Trường bắt buộc của đèn trong file sao lưu
 
 // Đọc file sao lưu. Trả về { ok, settings, lights } hoặc { ok: false, error }.
 export function parseBackup(text, validRooms) {

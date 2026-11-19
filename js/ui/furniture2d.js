@@ -2,9 +2,9 @@
 
 // Vẽ nội thất nhìn từ trên xuống cho sơ đồ mặt bằng (SVG, toạ độ 0–100).
 
-const r = (x, y, w, h, cls, rx = 0.6) =>
+const r = (x, y, w, h, cls, rx = 0.6) =>  // Chuỗi <rect> SVG
   `<rect class="${cls}" x="${x.toFixed(2)}" y="${y.toFixed(2)}" width="${w.toFixed(2)}" height="${h.toFixed(2)}" rx="${rx}" />`;
-const c = (cx, cy, rad, cls) => `<circle class="${cls}" cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${rad}" />`;
+const c = (cx, cy, rad, cls) => `<circle class="${cls}" cx="${cx.toFixed(2)}" cy="${cy.toFixed(2)}" r="${rad}" />`;  // Chuỗi <circle> SVG
 
 // Dải sát một cạnh của hộp (lưng sofa, đầu giường…).
 function strip(f, side, t) {
@@ -13,9 +13,9 @@ function strip(f, side, t) {
   if (side === 'left') return [f.x, f.y, t, f.h];
   return [f.x + f.w - t, f.y, t, f.h];
 }
-const vertical = (side) => side === 'left' || side === 'right';
+const vertical = (side) => side === 'left' || side === 'right';  // Cạnh trái/phải?
 
-const SHAPES = {
+const SHAPES = {  // Hàm vẽ cho 16 loại nội thất
   rug: (f) => r(f.x, f.y, f.w, f.h, 'fu-rug', 1) + r(f.x + 1, f.y + 1, f.w - 2, f.h - 2, 'fu-rug-inner', 0.6),
 
   bed(f) {
@@ -87,7 +87,7 @@ const SHAPES = {
 };
 SHAPES.armchair = SHAPES.sofa;
 
-export function furnitureSvg(list) {
+export function furnitureSvg(list) {  // Ghép mọi món nội thất thành SVG
   return list.map((f) => `<g class="fu fu-${f.type}">${SHAPES[f.type]?.(f) ?? ''}</g>`).join('');
 }
 

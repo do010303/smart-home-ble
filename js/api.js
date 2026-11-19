@@ -5,7 +5,7 @@
  * Cung cấp giao diện lập trình ứng dụng REST & WebSocket mô phỏng cho Gateway.
  */
 
-export const API_CATALOG = Object.freeze([
+export const API_CATALOG = Object.freeze([  // 11 endpoint: method, path, mô tả, body mẫu
   {
     method: 'GET',
     path: '/api/v1/lights',
@@ -74,7 +74,7 @@ export const API_CATALOG = Object.freeze([
   }
 ]);
 
-export const apiCallHistory = [];
+export const apiCallHistory = [];  // 50 lần gọi API gần nhất
 
 // Lệnh cURL tương ứng, theo địa chỉ gateway trong Cài đặt.
 export function buildCurl(item, baseUrl) {
@@ -83,7 +83,7 @@ export function buildCurl(item, baseUrl) {
   return `curl -X ${item.method} ${url} \\\n  -H 'Content-Type: application/json' \\\n  -d '${JSON.stringify(item.sampleBody)}'`;
 }
 
-export function executeApiRequest({ method, path, body = null, context }) {
+export function executeApiRequest({ method, path, body = null, context }) {  // REST API giả lập: khớp method + đường dẫn rồi gọi hàm điều khiển
   const startTime = performance.now();
   const normalizedMethod = method.toUpperCase();
   const cleanPath = path.trim().replace(/\/+$/, '');
@@ -279,7 +279,7 @@ export function executeApiRequest({ method, path, body = null, context }) {
 /**
  * Gắn window.HomeMeshAPI vào global scope để DevTools Console hoặc script bên ngoài có thể gọi API.
  */
-export function registerGlobalApi(context) {
+export function registerGlobalApi(context) {  // Gắn window.HomeMeshAPI để gọi từ DevTools
   if (typeof window === 'undefined') return;
 
   window.HomeMeshAPI = {

@@ -12,7 +12,6 @@ import {
   DEFAULT_SETTINGS, buildBackup, parseBackup, resolveTheme, sanitizeSettings
 } from '../js/settings.js';
 import { planScan, rssiBars, webBluetoothSupport } from '../js/scanner.js';
-import { buildCommand, expectsStatus, paramsForIteration, statePatch } from '../js/testbench.js';
 import {
   encodeAttentionSet, encodeNodeReset, encodeSubscriptionOverwrite, encodeLightnessSet
 } from '../js/mesh.js';
@@ -257,19 +256,6 @@ test('Web Bluetooth: báo đúng khi không hỗ trợ', () => {
 });
 
 // ---------- Điều khiển thử
-test('Điều khiển thử: mã hoá lệnh, đảo trạng thái, quét màu', () => {
-  assert.equal(toHex(buildCommand('onoff', { on: true }, { tid: 2, ack: false })), '82 03 01 02');
-  assert.equal(toHex(buildCommand('get', {}, { tid: 0, ack: false })), '82 01');
-  assert.equal(expectsStatus('get', false), true);
-  assert.equal(expectsStatus('onoff', false), false);
-  assert.equal(paramsForIteration('toggle', {}, 0, 4, false).on, true);
-  assert.equal(paramsForIteration('toggle', {}, 1, 4, false).on, false);
-  assert.equal(paramsForIteration('sweep', {}, 0, 5).kelvin, 2700);
-  assert.equal(paramsForIteration('sweep', {}, 4, 5).kelvin, 6500);
-  assert.deepEqual(statePatch('ctl', { lightness: 40, kelvin: 9000 }), { on: true, lightness: 40, kelvin: 6500 });
-  assert.equal(statePatch('get', {}), null);
-});
-
 test('API: cURL theo địa chỉ gateway, có endpoint xoá và nháy đèn', () => {
   const put = API_CATALOG.find((a) => a.method === 'PUT');
   assert.ok(buildCurl(put, 'http://10.0.0.2:9000').startsWith('curl -X PUT http://10.0.0.2:9000/api/v1/lights/L1'));

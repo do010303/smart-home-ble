@@ -18,6 +18,18 @@
   <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
   <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
   <link rel="stylesheet" href="css/style.css" />
+  <script>
+    // Chưa đăng nhập (hoặc phiên hết hạn) → chuyển sang login.html, giữ lại ?view=… để quay về.
+    (function () {
+      try {
+        var k = 'homemesh-session-v1';
+        var s = JSON.parse(sessionStorage.getItem(k) || localStorage.getItem(k));
+        if (s && s.expiresAt > Date.now()) return;
+      } catch (e) { /* đọc lỗi thì coi như chưa đăng nhập */ }
+      var next = location.search + location.hash;
+      location.replace('login.html' + (next ? '?next=' + encodeURIComponent(next) : ''));
+    })();
+  </script>
   <script type="module" src="js/app.js"></script>
 </head>
 <body>
@@ -59,6 +71,10 @@
           </button>
 
           <button type="button" class="btn btn-ghost" id="back-settings" hidden>← Cài đặt</button>
+          <button type="button" class="account-btn" id="account-btn" title="Tài khoản">
+            <span class="avatar" id="account-avatar" aria-hidden="true"></span>
+            <span class="account-name" id="account-name"></span>
+          </button>
         </div>
       </header>
 
@@ -182,95 +198,6 @@
         <div class="scene-grid" id="scene-grid"></div>
       </section>
 
-      <!-- ĐIỀU KHIỂN THỬ -->
-      <section class="view" id="view-test">
-        <div class="test-layout">
-          <div class="card test-form">
-            <div class="card-head"><h2>Soạn lệnh</h2><span class="tag" id="t-path-tag">LAN</span></div>
-            <label class="field">Đích
-              <select id="t-target"></select>
-            </label>
-            <label class="field">Lệnh
-              <select id="t-command"></select>
-            </label>
-
-            <div class="field" data-param="on">
-              <span>Trạng thái</span>
-              <div class="segmented" role="radiogroup" aria-label="Bật hoặc tắt" id="t-on">
-                <button type="button" role="radio" data-on="1" aria-checked="true">Bật</button>
-                <button type="button" role="radio" data-on="0" aria-checked="false">Tắt</button>
-              </div>
-            </div>
-            <div class="field" data-param="lightness">
-              <div class="control-label"><span>Độ sáng</span><output id="t-lightness-out">80%</output></div>
-              <input type="range" class="range range-light" id="t-lightness" min="1" max="100" value="80" aria-label="Độ sáng" />
-            </div>
-            <div class="field" data-param="kelvin">
-              <div class="control-label"><span>Nhiệt độ màu</span><output id="t-kelvin-out">4000K</output></div>
-              <input type="range" class="range range-cct" id="t-kelvin" min="2700" max="6500" step="50" value="4000" aria-label="Nhiệt độ màu" />
-            </div>
-            <label class="field" data-param="scene">Cảnh
-              <select id="t-scene"></select>
-            </label>
-            <label class="field" data-param="seconds">Thời gian nháy (giây)
-              <input type="number" id="t-seconds" min="1" max="30" value="5" />
-            </label>
-
-            <div class="field-row">
-              <label class="field">Số lần lặp
-                <input type="number" id="t-count" min="1" max="200" value="10" />
-              </label>
-              <label class="field">Giãn cách (ms)
-                <input type="number" id="t-interval" min="0" max="2000" step="10" value="100" />
-              </label>
-            </div>
-            <label class="switch-row" id="t-ack-row"><input type="checkbox" id="t-ack" checked /><span class="switch" aria-hidden="true"></span>Chờ phản hồi Status (Ack) — đo thêm độ trễ khứ hồi</label>
-
-            <div class="packet">
-              <div class="control-label"><span>Gói tin sẽ gửi</span><output id="t-packet-meta"></output></div>
-              <code id="t-packet">—</code>
-            </div>
-
-            <div class="card-actions">
-              <button class="btn btn-primary" id="t-run" type="button">▶ Chạy thử</button>
-              <button class="btn" id="t-stop" type="button" disabled>■ Dừng</button>
-              <button class="btn btn-ghost" id="t-clear" type="button">Xoá kết quả</button>
-            </div>
-            <div class="progress" aria-hidden="true"><i id="t-progress"></i></div>
-            <p class="small muted" id="t-progress-text" aria-live="polite"></p>
-
-            <div class="quick-tests">
-              <small class="muted">Bài thử nhanh</small>
-              <div class="chips">
-                <button type="button" class="chip" data-quick="toggle">Bật/tắt 1 đèn 20 lần</button>
-                <button type="button" class="chip" data-quick="sweep">Quét màu toàn nhà</button>
-                <button type="button" class="chip" data-quick="room">Đổi màu cả phòng</button>
-                <button type="button" class="chip" data-quick="get">Đọc trạng thái 30 lần</button>
-              </div>
-            </div>
-          </div>
-
-          <div class="test-results">
-            <div class="card">
-              <div class="card-head"><h2>Kết quả</h2><span class="tag" id="t-verdict">Chưa chạy</span></div>
-              <div class="stats" id="t-stats"></div>
-              <svg id="t-chart" class="sparkline tall" viewBox="0 0 300 120" preserveAspectRatio="none" role="img" aria-label="Biểu đồ độ trễ từng lệnh"></svg>
-              <p class="chart-legend small muted"><span><i class="lg-line one"></i>Một chiều (lệnh tới đèn)</span><span><i class="lg-line rtt"></i>Khứ hồi (có Status)</span><span><i class="lg-line thr"></i>Mục tiêu</span></p>
-            </div>
-            <div class="card">
-              <div class="card-head"><h2>Từng lệnh</h2><span class="muted small" id="t-count-text"></span></div>
-              <div class="table-wrap">
-                <table class="table mono" id="t-table">
-                  <thead><tr><th>#</th><th>Đích</th><th>Opcode</th><th>Payload</th><th>Một chiều</th><th>Khứ hồi</th></tr></thead>
-                  <tbody></tbody>
-                </table>
-                <p class="empty" id="t-empty">Chưa chạy lệnh nào.</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
       <!-- 4. MẠNG MESH, ĐỘ TRỄ & JITTER -->
       <section class="view" id="view-mesh">
         <div class="mesh-layout">
@@ -330,72 +257,6 @@
         </div>
       </section>
 
-      <!-- 5. API GATEWAY CONSOLE -->
-      <section class="view" id="view-api">
-        <div class="panel-head">
-          <p class="muted">
-            Mô phỏng <b>REST API &amp; WebSocket Gateway</b> cho hệ thống chiếu sáng thông minh BLE Mesh.
-            Các API này cho phép tích hợp với Home Assistant, ứng dụng di động hoặc Web Dashboard.
-          </p>
-          <div class="row-gap">
-            <button class="btn btn-primary" id="btn-run-api" type="button">▶ Gửi Request</button>
-            <button class="btn btn-ghost" id="btn-copy-curl" type="button">Sao chép cURL</button>
-          </div>
-        </div>
-
-        <div class="api-layout">
-          <!-- Cột trái: Endpoint Catalog & Request Editor -->
-          <div class="api-left">
-            <div class="card">
-              <div class="card-head"><h2>Danh mục API Endpoints</h2><span class="tag">REST v1</span></div>
-              <div class="api-catalog-list" id="api-catalog-list"></div>
-            </div>
-
-            <div class="card">
-              <div class="card-head">
-                <h2>Request Body (JSON)</h2>
-                <span class="small muted mono" id="api-req-method-path">GET /api/v1/lights</span>
-              </div>
-              <textarea class="api-body-editor mono" id="api-request-body" rows="6" placeholder="Không yêu cầu Request Body cho GET"></textarea>
-              <div class="card-actions">
-                <button class="btn btn-primary" id="btn-run-api-bottom" type="button">▶ Gửi lệnh API</button>
-                <button class="btn btn-ghost" id="btn-reset-api-body" type="button">Khôi phục Body mẫu</button>
-              </div>
-            </div>
-          </div>
-
-          <!-- Cột phải: Response & cURL -->
-          <div class="api-right">
-            <div class="card">
-              <div class="card-head">
-                <h2>Kết quả phản hồi (Response)</h2>
-                <div class="api-response-meta">
-                  <span class="status-pill ok" id="api-res-status">200 OK</span>
-                  <span class="latency-badge" id="api-res-time">— ms</span>
-                </div>
-              </div>
-              <pre class="api-response-viewer mono"><code id="api-response-code">// Chọn endpoint và bấm 'Gửi Request' để xem kết quả...</code></pre>
-            </div>
-
-            <div class="card">
-              <div class="card-head"><h2>Lệnh cURL tương ứng</h2></div>
-              <pre class="api-curl-viewer mono"><code id="api-curl-code">curl -X GET http://192.168.1.100:8080/api/v1/lights</code></pre>
-            </div>
-          </div>
-        </div>
-
-        <div class="card">
-          <div class="card-head"><h2>Lịch sử gọi API (Live Calls)</h2><button class="btn btn-ghost" id="btn-clear-api-log" type="button">Xoá</button></div>
-          <div class="table-wrap">
-            <table class="table mono" id="api-log-table">
-              <thead><tr><th>Thời gian</th><th>Method</th><th>Endpoint</th><th>Status</th><th>Thời gian xử lý</th><th>Thông điệp</th></tr></thead>
-              <tbody></tbody>
-            </table>
-            <p class="empty" id="api-log-empty">Chưa có lệnh gọi API nào.</p>
-          </div>
-        </div>
-      </section>
-
       <!-- 6. NHẬT KÝ GÓI TIN -->
       <section class="view" id="view-log">
         <div class="panel-head">
@@ -419,6 +280,24 @@
       <!-- CÀI ĐẶT -->
       <section class="view" id="view-settings">
         <form class="settings-grid" id="settings-form" autocomplete="off" onsubmit="return false">
+          <div class="card account-card" id="account-card">
+            <div class="card-head"><h2>Tài khoản</h2><span class="tag ok">Đang đăng nhập</span></div>
+            <div class="account-head">
+              <span class="avatar big" id="acc-avatar" aria-hidden="true"></span>
+              <div><b id="acc-name"></b><small class="muted" id="acc-email"></small></div>
+            </div>
+            <div class="field-row">
+              <label class="field">Tên hiển thị <input type="text" id="acc-name-input" maxlength="60" autocomplete="name" /></label>
+              <button class="btn" id="btn-save-name" type="button">Lưu tên</button>
+            </div>
+            <p class="small muted" id="acc-meta"></p>
+            <div class="card-actions">
+              <button class="btn" id="btn-change-pw" type="button">Đổi mật khẩu</button>
+              <button class="btn btn-ghost" id="btn-logout" type="button">Đăng xuất</button>
+              <button class="btn btn-danger" id="btn-delete-account" type="button">Xoá tài khoản</button>
+            </div>
+          </div>
+
           <div class="card">
             <div class="card-head"><h2>Giao diện</h2></div>
             <div class="field">
@@ -461,7 +340,7 @@
           </div>
           <details class="card tech-card" id="tech-card">
             <summary>
-              <span><b>Kỹ thuật viên</b><small class="muted">Gateway, mạng BLE Mesh, kiểm tra kết nối và công cụ đo — người dùng không cần chỉnh</small></span>
+              <span><b>Mạng &amp; gateway</b><small class="muted">Gateway, MAC, kiểm tra kết nối, sơ đồ mesh và nhật ký — thường không cần chỉnh</small></span>
             </summary>
             <div class="tech-grid">
               <div>
@@ -525,9 +404,7 @@
             <div class="tech-tools">
               <h3>Công cụ đo &amp; gỡ lỗi</h3>
               <div class="more-grid">
-                <button type="button" class="more-item" data-view="test"><span aria-hidden="true">▷</span>Điều khiển thử<small class="muted">Gửi lệnh lặp, đo độ trễ</small></button>
                 <button type="button" class="more-item" data-view="mesh"><span aria-hidden="true">⬡</span>Mạng Mesh<small class="muted">Topology, jitter, stress test</small></button>
-                <button type="button" class="more-item" data-view="api"><span aria-hidden="true">{}</span>API Gateway<small class="muted">Thử REST API, cURL</small></button>
                 <button type="button" class="more-item" data-view="log"><span aria-hidden="true">≡</span>Nhật ký gói tin<small class="muted">Opcode, payload, TTL</small></button>
               </div>
             </div>
@@ -635,6 +512,53 @@
     </div>
   </dialog>
 
+
+  <!-- MODAL: ĐỔI MẬT KHẨU -->
+  <dialog class="sheet small-sheet" id="password-dialog" aria-labelledby="pw-title">
+    <form method="dialog" class="sheet-close-form"><button class="icon-btn" aria-label="Đóng">✕</button></form>
+    <form class="sheet-body" id="password-form" novalidate>
+      <p class="eyebrow">Tài khoản</p>
+      <h2 id="pw-title">Đổi mật khẩu</h2>
+      <p class="form-alert" role="alert" hidden></p>
+      <label class="field">Mật khẩu hiện tại
+        <input type="password" name="current" autocomplete="current-password" required />
+        <small class="field-error"></small>
+      </label>
+      <label class="field">Mật khẩu mới
+        <input type="password" name="next" autocomplete="new-password" required />
+        <span class="pw-meter" data-strength="0"><i></i><i></i><i></i><i></i></span>
+        <small class="field-hint">Ít nhất 8 ký tự, có cả chữ và số.</small>
+        <small class="field-error"></small>
+      </label>
+      <label class="field">Nhập lại mật khẩu mới
+        <input type="password" name="confirm" autocomplete="new-password" required />
+        <small class="field-error"></small>
+      </label>
+      <label class="check-row"><input type="checkbox" name="relogin" /> Đăng xuất sau khi đổi</label>
+      <div class="card-actions">
+        <button class="btn btn-primary" type="submit">Đổi mật khẩu</button>
+        <button class="btn btn-ghost" type="button" data-close>Huỷ</button>
+      </div>
+      <p class="small muted">Quên mật khẩu hiện tại? Đăng xuất rồi chọn <b>Quên mật khẩu</b> ở trang đăng nhập.</p>
+    </form>
+  </dialog>
+
+  <!-- MODAL: XOÁ TÀI KHOẢN -->
+  <dialog class="sheet small-sheet" id="delete-account-dialog" aria-labelledby="del-title">
+    <form class="sheet-body" id="delete-account-form" novalidate>
+      <h2 id="del-title">Xoá tài khoản?</h2>
+      <p class="muted">Tài khoản sẽ bị xoá khỏi máy này và không khôi phục được. Nhập mật khẩu để xác nhận.</p>
+      <p class="form-alert" role="alert" hidden></p>
+      <label class="field">Mật khẩu
+        <input type="password" name="password" autocomplete="current-password" required />
+        <small class="field-error"></small>
+      </label>
+      <div class="card-actions">
+        <button class="btn btn-danger" type="submit">Xoá tài khoản</button>
+        <button class="btn btn-ghost" type="button" data-close>Huỷ</button>
+      </div>
+    </form>
+  </dialog>
 
   <!-- MODAL: HƯỚNG DẪN LẦN ĐẦU -->
   <dialog class="sheet" id="welcome-dialog" aria-labelledby="welcome-title">

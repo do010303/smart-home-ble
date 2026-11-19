@@ -4,9 +4,10 @@
 
 ```bash
 node tests/model_test.mjs
+node tests/auth_test.mjs   # 10 test tài khoản
 ```
 
-31 test: giới hạn Kelvin, màu 2700/6500 K, trộn kênh PWM, công suất không đổi khi đổi màu, lightness perceptual → linear, mã hoá opcode/payload (gồm Health Attention, Config Node Reset, Subscription Overwrite), số segment, TID, topology ≤ 3 hop, worst-case LAN 3 hop < 50 ms, cloud > 50 ms, độ trễ group, độ trễ một chiều tách khỏi khứ hồi, hệ số tải mạng, thống kê và jitter, mặt bằng nhà, API (GET/PUT, cURL, DELETE, identify), cài đặt hợp lệ, sao lưu/khôi phục, lịch quét thiết bị, Web Bluetooth, lệnh điều khiển thử, nội thất nằm trong phòng, kiểu sáng theo phòng, MAC gateway.
+30 test: giới hạn Kelvin, màu 2700/6500 K, trộn kênh PWM, công suất không đổi khi đổi màu, lightness perceptual → linear, mã hoá opcode/payload (gồm Health Attention, Config Node Reset, Subscription Overwrite), số segment, TID, topology ≤ 3 hop, worst-case LAN 3 hop < 50 ms, cloud > 50 ms, độ trễ group, độ trễ một chiều tách khỏi khứ hồi, hệ số tải mạng, thống kê và jitter, mặt bằng nhà, API (GET/PUT, cURL, DELETE, identify), cài đặt hợp lệ, sao lưu/khôi phục, lịch quét thiết bị, Web Bluetooth, nội thất nằm trong phòng, kiểu sáng theo phòng, MAC gateway.
 
 ## Thủ công
 
@@ -19,7 +20,7 @@ node tests/model_test.mjs
 | 5 | Bấm preset "Trung tính 4000K" | Slider nhảy về 4000 K, chip được chọn |
 | 6 | Kéo thanh "Màu ánh sáng" của một phòng | Nhật ký: gói tới địa chỉ group `0xC00x (n)`, không phải n gói |
 | 7 | Tab Cảnh → "Thư giãn" | Mọi đèn 2700 K 35 %, gói `Scene Recall Unack` |
-| 8 | Cài đặt → Kỹ thuật viên → Mạng Mesh → Thử tải 100 lệnh | ≥ 95 % lệnh < 50 ms, P95 < 50 ms ở chế độ LAN |
+| 8 | Cài đặt → Mạng & gateway → Mạng Mesh → Thử tải 100 lệnh | ≥ 95 % lệnh < 50 ms, P95 < 50 ms ở chế độ LAN |
 | 9 | Chuyển sang Cloud, gửi lệnh | Pill đỏ (> 50 ms) — minh hoạ vì sao phải local-first |
 | 10 | Tắt "Gateway online", gửi lệnh | Toast chuyển BLE Proxy, cột Đường = BLE |
 | 11 | + Thêm đèn → chọn thiết bị → Phòng ngủ → Bắt đầu | 7 bước chạy lần lượt, đèn mới xuất hiện trên sơ đồ và Trang chủ |
@@ -31,11 +32,8 @@ node tests/model_test.mjs
 | 17 | Sửa → đổi tên + chuyển phòng | Đèn đổi tên, sang phòng mới; Nhật ký có `Config Model Subscription Overwrite` |
 | 18 | Xoá một đèn relay (ví dụ L5) → Xác nhận | Đèn biến mất; đèn con (L6) nối lên node cha, số hop cập nhật |
 | 19 | Thiết bị → Tìm thiết bị gần đây (Chrome/Edge, HTTPS) | Hộp chọn Bluetooth của trình duyệt mở ra; Firefox/Safari hiện thông báo không hỗ trợ |
-| 20 | Điều khiển thử → đổi lệnh, độ sáng, màu | Ô "Gói tin sẽ gửi" cập nhật hex ngay |
-| 21 | Chạy thử 30 lệnh có Ack | Bảng kết quả đủ 30 dòng, có cột khứ hồi; nhãn Đạt nếu P95 một chiều < mục tiêu |
-| 22 | Bấm Dừng giữa chừng | Dừng ngay, hiện "Đã dừng" |
 | 23 | Cài đặt → TTL = 2 | Gợi ý đỏ "2 đèn ở xa hơn 2 hop"; bảng Thiết bị gắn nhãn "vượt TTL" |
-| 24 | Cài đặt → đổi IP gateway | Nav và lệnh cURL ở màn hình API dùng IP mới |
+| 24 | Cài đặt → đổi IP gateway | Ô gateway ở thanh bên và dòng "Địa chỉ API" khi Kiểm tra dùng IP mới |
 | 25 | Sao lưu ra file → Khôi phục mặc định → Khôi phục từ file | Về 8 đèn mẫu, rồi trở lại đúng danh sách đèn đã sao lưu |
 | 26 | Điện thoại 390 px → mở lần lượt 8 màn hình | Không màn hình nào bị tràn ngang |
 | 27 | Mở link lần đầu | Hiện hộp hướng dẫn; bấm Bắt đầu thì lần sau không hiện lại |
@@ -49,6 +47,14 @@ node tests/model_test.mjs
 | 35 | Nhà của tôi → Phòng khách → **Đón khách** | Cả phòng 5000 K 100 %, nút Đón khách được tô; sơ đồ sáng theo |
 | 36 | Bấm tên phòng "Phòng làm việc" trên sơ đồ 2D | Thẻ Phòng làm việc được viền cam và cuộn tới |
 | 37 | Kéo thanh độ sáng của 1 đèn trong danh sách đèn | Chỉ đèn đó đổi, thẻ phòng cập nhật công suất |
-| 38 | Cài đặt → Kỹ thuật viên → **Kiểm tra MAC & API** | 5 dòng ✓: địa chỉ API, MAC, REST API 200 OK, 8/8 node, độ trễ < 50 ms |
+| 38 | Cài đặt → Mạng & gateway → **Kiểm tra MAC & API** | 5 dòng ✓: địa chỉ API, MAC, REST API 200 OK, 8/8 node, độ trễ < 50 ms |
 | 39 | Nhập MAC sai (ví dụ `12:34`) | Báo "Giá trị không hợp lệ — giữ nguyên" |
-| 40 | Kỹ thuật viên → Mạng Mesh → **← Cài đặt** | Quay lại Cài đặt; thanh điều hướng luôn tô mục Cài đặt |
+| 40 | Mạng & gateway → Mạng Mesh → **← Cài đặt** | Quay lại Cài đặt; thanh điều hướng luôn tô mục Cài đặt |
+| 41 | Mở `?view=test` hoặc `?view=api` | Tự mở Nhà của tôi (2 màn hình này đã gỡ) |
+| 42 | Mở web khi chưa đăng nhập (`?view=devices`) | Chuyển sang trang đăng nhập; đăng nhập xong mở đúng Thiết bị |
+| 43 | Đăng nhập sai mật khẩu 5 lần | Báo số lần còn lại; lần 5 khoá 5 phút |
+| 44 | Quên mật khẩu → nhập email demo → nhập mã trong hộp thư giả lập + mật khẩu mới | Đăng nhập luôn; mật khẩu cũ không còn dùng được |
+| 45 | Nhập sai mã khôi phục | Báo "Mã không đúng (còn 4 lần)"; nút Gửi lại khoá 30 giây |
+| 46 | Đăng ký mật khẩu `abc` | Báo "Mật khẩu cần ít nhất 8 ký tự" |
+| 47 | Cài đặt → Tài khoản → Đổi mật khẩu với mật khẩu hiện tại sai | Báo lỗi ngay ô Mật khẩu hiện tại |
+| 48 | Đăng xuất | Về trang đăng nhập, hiện "Bạn đã đăng xuất."; trạng thái đèn vẫn giữ |

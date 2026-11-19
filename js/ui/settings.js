@@ -8,7 +8,7 @@ export function mountSettings(ctx) {
   const { $, $$, state } = ctx;
   let installPrompt = null;
 
-  function render() {
+  function render() {  // Vẽ lại màn hình này (app.js gọi khi mở / khi dữ liệu đổi)
     const s = state.settings;
     $$('#settings-form [data-setting]').forEach((el) => {
       const value = s[el.dataset.setting];
@@ -30,7 +30,7 @@ export function mountSettings(ctx) {
       : installPrompt ? '' : 'Cài lên điện thoại: mở menu trình duyệt → “Thêm vào Màn hình chính”.';
   }
 
-  function onChange(e) {
+  function onChange(e) {  // Một ô cài đặt đổi → updateSettings
     const el = e.target.closest('[data-setting]');
     if (!el) return;
     const key = el.dataset.setting;
@@ -42,13 +42,13 @@ export function mountSettings(ctx) {
     else if (String(value) !== String(after)) ctx.toast('Giá trị không hợp lệ — giữ nguyên');
   }
 
-  function backup() {
+  function backup() {  // Tải file sao lưu
     const data = buildBackup({ settings: state.settings, lights: state.lights });
     ctx.downloadJson(data, `homemesh-backup-${new Date().toISOString().slice(0, 10)}.json`);
     ctx.toast(`Đã sao lưu ${state.lights.length} đèn và cài đặt`);
   }
 
-  async function restore(file) {
+  async function restore(file) {  // Khôi phục từ file
     if (!file) return;
     const text = await file.text();
     const result = parseBackup(text, ROOMS.map((r) => r.id));
@@ -64,7 +64,7 @@ export function mountSettings(ctx) {
     ctx.toast(`Đã khôi phục ${result.lights.length} đèn`);
   }
 
-  async function factoryReset() {
+  async function factoryReset() {  // Khôi phục mặc định
     const ok = await ctx.confirmAsk(
       'Khôi phục mặc định?',
       'Xoá mọi đèn đã thêm, cài đặt và số liệu đo trong trình duyệt này, đưa về 8 đèn mẫu ban đầu.',
@@ -88,7 +88,7 @@ export function mountSettings(ctx) {
   $('#btn-share').addEventListener('click', () => ctx.copyText(location.origin + location.pathname, 'Đã sao chép link — gửi cho người khác để mở demo'));
   $('#btn-show-welcome').addEventListener('click', ctx.showWelcome);
 
-  // Kỹ thuật viên: kiểm tra địa chỉ, MAC, REST API và các node mesh.
+  // Mạng & gateway: kiểm tra địa chỉ, MAC, REST API và các node mesh.
   $('#btn-check-gateway').addEventListener('click', async (e) => {
     const btn = e.currentTarget;
     const list = $('#check-list');

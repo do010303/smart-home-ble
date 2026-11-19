@@ -10,7 +10,7 @@ export const LED_SPEC = Object.freeze({
   standbyWatts: 0.3
 });
 
-export const CCT_PRESETS = Object.freeze([
+export const CCT_PRESETS = Object.freeze([  // 5 preset nhiệt độ màu
   { kelvin: 2700, label: 'Ấm', hint: 'Thư giãn, buổi tối' },
   { kelvin: 3000, label: 'Vàng nhạt', hint: 'Phòng ngủ' },
   { kelvin: 4000, label: 'Trung tính', hint: 'Phòng khách, bếp' },
@@ -18,15 +18,15 @@ export const CCT_PRESETS = Object.freeze([
   { kelvin: 6500, label: 'Ánh ngày', hint: 'Làm việc, tập trung' }
 ]);
 
-const clamp = (v, min, max) => Math.min(max, Math.max(min, v));
+const clamp = (v, min, max) => Math.min(max, Math.max(min, v));  // Kẹp số trong [min, max]
 
-export function clampKelvin(kelvin) {
+export function clampKelvin(kelvin) {  // Kẹp và làm tròn Kelvin về 2700–6500
   return Math.round(clamp(Number(kelvin), LED_SPEC.minK, LED_SPEC.maxK));
 }
 
 // Xấp xỉ màu hiển thị của nhiệt độ màu (thuật toán Tanner Helland, sai số < 1% trong 1000–40000K).
 // Chỉ dùng để hiển thị trên màn hình; driver thực không cần RGB.
-export function kelvinToRgb(kelvin) {
+export function kelvinToRgb(kelvin) {  // Xấp xỉ màu hiển thị của nhiệt độ màu (thuật toán Tanner Helland, sai số < 1% trong 1000–40000K)
   const t = clamp(kelvin, 1000, 40000) / 100;
   let r;
   let g;
@@ -51,11 +51,11 @@ export function kelvinToRgb(kelvin) {
   };
 }
 
-export function rgbToHex({ r, g, b }) {
+export function rgbToHex({ r, g, b }) {  // {r,g,b} → #rrggbb
   return '#' + [r, g, b].map((v) => v.toString(16).padStart(2, '0')).join('').toUpperCase();
 }
 
-export function kelvinToHex(kelvin) {
+export function kelvinToHex(kelvin) {  // Kelvin → mã màu hex để vẽ
   return rgbToHex(kelvinToRgb(kelvin));
 }
 
@@ -69,7 +69,7 @@ export function cctGradient(steps = 8) {
   return `linear-gradient(90deg, ${stops.join(', ')})`;
 }
 
-export function kelvinLabel(kelvin) {
+export function kelvinLabel(kelvin) {  // Tên màu gần nhất (Ấm, Trung tính…)
   if (kelvin < 3200) return 'Trắng ấm';
   if (kelvin < 4500) return 'Trung tính';
   if (kelvin < 5600) return 'Trắng';
@@ -78,17 +78,17 @@ export function kelvinLabel(kelvin) {
 
 // BLE Mesh Light Lightness là thang cảm nhận (perceptual). Driver PWM cần giá trị tuyến tính:
 // Lightness Linear = Actual² / 65535 (Mesh Model spec, Light Lightness).
-export function percentToLightnessActual(percent) {
+export function percentToLightnessActual(percent) {  // BLE Mesh Light Lightness là thang cảm nhận (perceptual)
   return Math.round((clamp(percent, 0, 100) / 100) * 65535);
 }
 
-export function lightnessActualToLinear(actual) {
+export function lightnessActualToLinear(actual) {  // Actual² / 65535: độ sáng tuyến tính cho PWM
   return Math.round((actual * actual) / 65535);
 }
 
 // Trộn 2 kênh theo thang mired (1e6/K) để chuyển màu mượt theo cảm nhận mắt người.
 // Tổng duty 2 kênh = độ sáng tuyến tính → công suất không đổi khi đổi màu.
-export function cctToChannels(kelvin, lightnessPercent, spec = LED_SPEC) {
+export function cctToChannels(kelvin, lightnessPercent, spec = LED_SPEC) {  // Trộn 2 kênh theo thang mired (1e6/K) để chuyển màu mượt theo cảm nhận mắt người
   const k = clamp(kelvin, spec.warmK, spec.coolK);
   const mWarm = 1e6 / spec.warmK;
   const mCool = 1e6 / spec.coolK;
@@ -103,7 +103,7 @@ export function cctToChannels(kelvin, lightnessPercent, spec = LED_SPEC) {
   };
 }
 
-export function estimatePowerW(ratedW, on, lightnessPercent, spec = LED_SPEC) {
+export function estimatePowerW(ratedW, on, lightnessPercent, spec = LED_SPEC) {  // Công suất ước tính = chờ + định mức × linear
   if (!on) return spec.standbyWatts;
   const { linear } = cctToChannels(spec.warmK, lightnessPercent, spec);
   return Math.round((spec.standbyWatts + ratedW * linear) * 10) / 10;

@@ -1,0 +1,167 @@
+<!doctype html>
+<html lang="vi" data-theme="dark">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Đăng nhập — HomeMesh</title>
+  <meta name="description" content="Đăng nhập HomeMesh để điều khiển đèn trong nhà." />
+  <meta name="theme-color" content="#0E1116" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="assets/icon-192.png" />
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap" rel="stylesheet" />
+  <link rel="icon" href="assets/icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="css/style.css" />
+  <script>
+    // Áp chủ đề đã chọn trong Cài đặt trước khi vẽ trang (tránh nháy màu).
+    (function () {
+      try {
+        var t = (JSON.parse(localStorage.getItem('homemesh-settings-v1')) || {}).theme || 'system';
+        if (t === 'system') t = matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark';
+        document.documentElement.dataset.theme = t;
+      } catch (e) { /* giữ chủ đề tối */ }
+    })();
+  </script>
+  <script type="module" src="js/ui/login.js"></script>
+</head>
+<body class="auth-body">
+  <main class="auth">
+    <!-- Bên trái: giới thiệu -->
+    <section class="auth-hero" aria-hidden="true">
+      <div class="brand">
+        <span class="brand-mark"></span>
+        <div><strong>HomeMesh</strong><small>BLE Mesh Lighting</small></div>
+      </div>
+      <div class="auth-glow">
+        <span class="lamp" style="--c:#ffd29a; --g:0.9"><span class="lamp-core"></span></span>
+      </div>
+      <div class="auth-hero-text">
+        <h2>Ánh sáng cả nhà, trong một trang web</h2>
+        <ul>
+          <li>Bật tắt, chỉnh độ sáng và màu từng đèn</li>
+          <li>Xem sơ đồ nhà 2D và 3D</li>
+          <li>Cảnh một chạm: Đọc sách, Xem phim, Đi ngủ</li>
+        </ul>
+      </div>
+    </section>
+
+    <!-- Bên phải: các form -->
+    <section class="auth-panel">
+      <div class="auth-card">
+        <div class="brand auth-brand-mobile">
+          <span class="brand-mark" aria-hidden="true"></span>
+          <div><strong>HomeMesh</strong><small>BLE Mesh Lighting</small></div>
+        </div>
+
+        <div class="segmented auth-tabs" role="tablist" id="auth-tabs">
+          <button type="button" role="tab" data-pane="login" aria-selected="true">Đăng nhập</button>
+          <button type="button" role="tab" data-pane="register" aria-selected="false">Đăng ký</button>
+        </div>
+
+        <!-- ĐĂNG NHẬP -->
+        <form class="auth-pane" id="pane-login" data-pane="login" novalidate>
+          <h1>Chào mừng trở lại</h1>
+          <p class="muted">Đăng nhập để điều khiển đèn trong nhà.</p>
+          <p class="form-alert" role="alert" hidden></p>
+          <label class="field">Email
+            <input type="email" name="email" autocomplete="username" required />
+            <small class="field-error"></small>
+          </label>
+          <label class="field">Mật khẩu
+            <span class="pw-wrap">
+              <input type="password" name="password" autocomplete="current-password" required />
+              <button type="button" class="pw-toggle" aria-label="Hiện mật khẩu">Hiện</button>
+            </span>
+            <small class="field-error"></small>
+          </label>
+          <div class="auth-row">
+            <label class="check-row"><input type="checkbox" name="remember" /> Ghi nhớ đăng nhập</label>
+            <button type="button" class="link-btn" data-goto="forgot">Quên mật khẩu?</button>
+          </div>
+          <button class="btn btn-primary full" type="submit">Đăng nhập</button>
+          <div class="demo-box">
+            <span>Tài khoản demo: <b class="mono">demo@homemesh.vn</b> / <b class="mono">homemesh123</b></span>
+            <button type="button" class="btn btn-ghost" id="fill-demo">Điền sẵn</button>
+          </div>
+        </form>
+
+        <!-- ĐĂNG KÝ -->
+        <form class="auth-pane" id="pane-register" data-pane="register" novalidate hidden>
+          <h1>Tạo tài khoản</h1>
+          <p class="muted">Mỗi tài khoản giữ cài đặt và ngôi nhà của riêng bạn trên máy này.</p>
+          <p class="form-alert" role="alert" hidden></p>
+          <label class="field">Họ tên
+            <input type="text" name="name" autocomplete="name" maxlength="60" required />
+            <small class="field-error"></small>
+          </label>
+          <label class="field">Email
+            <input type="email" name="email" autocomplete="email" required />
+            <small class="field-error"></small>
+          </label>
+          <label class="field">Mật khẩu
+            <span class="pw-wrap">
+              <input type="password" name="password" autocomplete="new-password" required />
+              <button type="button" class="pw-toggle" aria-label="Hiện mật khẩu">Hiện</button>
+            </span>
+            <span class="pw-meter" data-strength="0"><i></i><i></i><i></i><i></i></span>
+            <small class="field-hint">Ít nhất 8 ký tự, có cả chữ và số.</small>
+            <small class="field-error"></small>
+          </label>
+          <label class="field">Nhập lại mật khẩu
+            <input type="password" name="confirm" autocomplete="new-password" required />
+            <small class="field-error"></small>
+          </label>
+          <button class="btn btn-primary full" type="submit">Tạo tài khoản</button>
+        </form>
+
+        <!-- QUÊN MẬT KHẨU: bước 1 nhập email -->
+        <form class="auth-pane" id="pane-forgot" data-pane="forgot" novalidate hidden>
+          <button type="button" class="link-btn back" data-goto="login">← Quay lại đăng nhập</button>
+          <h1>Quên mật khẩu</h1>
+          <p class="muted">Nhập email đã đăng ký, chúng tôi gửi mã 6 số để đặt lại mật khẩu.</p>
+          <p class="form-alert" role="alert" hidden></p>
+          <label class="field">Email
+            <input type="email" name="email" autocomplete="email" required />
+            <small class="field-error"></small>
+          </label>
+          <button class="btn btn-primary full" type="submit">Gửi mã</button>
+        </form>
+
+        <!-- QUÊN MẬT KHẨU: bước 2 nhập mã + mật khẩu mới -->
+        <form class="auth-pane" id="pane-reset" data-pane="reset" novalidate hidden>
+          <button type="button" class="link-btn back" data-goto="forgot">← Đổi email</button>
+          <h1>Đặt lại mật khẩu</h1>
+          <p class="muted" id="reset-sent"></p>
+          <div class="mail-sim" id="mail-sim" hidden>
+            <small>Hộp thư giả lập · chưa có máy chủ email</small>
+            <div><b>HomeMesh</b> — Mã đặt lại mật khẩu của bạn: <b class="mono" id="mail-code"></b></div>
+            <small id="mail-expire"></small>
+          </div>
+          <p class="form-alert" role="alert" hidden></p>
+          <label class="field">Mã 6 số
+            <input type="text" name="code" inputmode="numeric" autocomplete="one-time-code" maxlength="6" pattern="\d{6}" class="code-input" required />
+            <small class="field-error"></small>
+          </label>
+          <label class="field">Mật khẩu mới
+            <span class="pw-wrap">
+              <input type="password" name="password" autocomplete="new-password" required />
+              <button type="button" class="pw-toggle" aria-label="Hiện mật khẩu">Hiện</button>
+            </span>
+            <span class="pw-meter" data-strength="0"><i></i><i></i><i></i><i></i></span>
+            <small class="field-error"></small>
+          </label>
+          <label class="field">Nhập lại mật khẩu mới
+            <input type="password" name="confirm" autocomplete="new-password" required />
+            <small class="field-error"></small>
+          </label>
+          <button class="btn btn-primary full" type="submit">Đặt lại và đăng nhập</button>
+          <p class="small muted center">Chưa nhận được mã? <button type="button" class="link-btn" id="resend">Gửi lại</button></p>
+        </form>
+      </div>
+      <p class="small muted center auth-foot">Dữ liệu tài khoản lưu trong trình duyệt này; mật khẩu được băm, không lưu dạng chữ.</p>
+    </section>
+  </main>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>

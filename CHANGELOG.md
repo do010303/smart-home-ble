@@ -1,5 +1,24 @@
 # Changelog
 
+## 1.3.0 — 19/11/2026
+
+### Thêm
+- **Trang đăng nhập** `login.html`: đăng nhập, đăng ký, **quên mật khẩu** (mã 6 số hết hạn sau 10 phút, sai 5 lần phải gửi lại; chưa có máy chủ email nên mã hiện trong "hộp thư giả lập"). Có tài khoản demo `demo@homemesh.vn` / `homemesh123`.
+- Mở app khi chưa đăng nhập → tự chuyển sang trang đăng nhập, xong quay lại đúng trang (giữ `?view=…`).
+- **Cài đặt → Tài khoản**: đổi tên hiển thị, **đổi mật khẩu**, đăng xuất, xoá tài khoản. Nút avatar trên thanh trên cùng.
+- `js/auth.js`: tài khoản lưu JSON trong localStorage (`homemesh-users-v1`), mật khẩu băm PBKDF2-SHA256 100 000 vòng + salt; phiên 12 giờ, "Ghi nhớ" 30 ngày; sai mật khẩu 5 lần khoá 5 phút.
+- `tests/auth_test.mjs` (10 test), chạy cả trong GitHub Actions.
+
+## 1.2.1 — 13/11/2026
+
+### Gỡ bỏ
+- Màn hình **Điều khiển thử** và **API Gateway** (console REST) trong Cài đặt → Kỹ thuật viên, cùng `js/testbench.js`, `js/ui/testbench.js` và phần CSS đi kèm. Kỹ thuật viên còn 2 công cụ: Mạng Mesh và Nhật ký.
+- REST API mô phỏng (`js/api.js`) vẫn giữ: nút **Kiểm tra MAC & API** dùng nó, và vẫn gọi được từ DevTools qua `window.HomeMeshAPI`.
+- Link cũ `?view=test` và `?view=api` tự mở Nhà của tôi.
+
+### Thay đổi
+- Không còn trang "Kỹ thuật viên": thẻ trong Cài đặt đổi tên thành **Mạng & gateway** (gateway, MAC, Kiểm tra MAC & API, mở Mạng Mesh / Nhật ký).
+
 ## 1.2.0 — 12/11/2026
 
 Tập trung vào người dùng: ít màn hình hơn, chỉnh đèn ngay trên một trang.
