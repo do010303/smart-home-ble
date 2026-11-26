@@ -2,8 +2,8 @@ import { defineConfig, devices } from '@playwright/test';
 
 // Test E2E theo kịch bản khách hàng. Trang được phục vụ thẳng từ thư mục dự án qua page.route
 // (xem tests/e2e/fixtures.mjs), không cần chạy web server.
-// Trên máy: dùng Chrome đã cài (channel 'chrome'). Trên CI: Chromium do Playwright tải về.
-const channel = process.env.CI ? undefined : 'chrome';
+// Dùng Google Chrome đã cài sẵn (trên máy và trên GitHub Actions ubuntu-24.04), không cần tải Chromium.
+const channel = 'chrome';
 
 export default defineConfig({
   testDir: 'tests/e2e',

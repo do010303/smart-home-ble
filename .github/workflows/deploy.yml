@@ -16,7 +16,7 @@ concurrency:
 
 jobs:
   test-and-deploy:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04  # có sẵn Google Chrome cho E2E
     steps:
       - uses: actions/checkout@v4
 
@@ -27,10 +27,10 @@ jobs:
       - name: Unit test (màu, gói tin, tài khoản, thiết kế nhà)
         run: npm test
 
-      - name: Cài Playwright + Chromium
+      - name: Cài Playwright (dùng Google Chrome có sẵn trên máy chạy)
         run: |
           npm ci
-          npx playwright install --with-deps chromium
+          google-chrome --version
 
       - name: E2E test theo kịch bản khách hàng (máy tính + điện thoại)
         run: npx playwright test
