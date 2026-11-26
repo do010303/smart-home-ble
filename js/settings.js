@@ -1,8 +1,9 @@
 'use strict';
 
 import { LOAD_PROFILES, PATHS } from './mesh.js';
+import { validateLayout } from './layout.js';
 
-export const APP_VERSION = '1.3.0';
+export const APP_VERSION = '2.0.0';
 export const SETTINGS_KEY = 'homemesh-settings-v1';
 export const BACKUP_FORMAT = 'homemesh-backup';
 
@@ -65,20 +66,22 @@ export function gatewayBaseUrl(settings) {  // http://<host>:<port>
   return `http://${settings.gatewayHost}:${settings.gatewayPort}`;
 }
 
-// File sao lưu: cài đặt + danh sách đèn (không gồm số liệu đo).
-export function buildBackup({ settings, lights, now = new Date() }) {
+// File sao lưu: cài đặt + danh sách đèn + sơ đồ nhà (không gồm số liệu đo).
+export function buildBackup({ settings, lights, layout = null, now = new Date() }) {
   return {
     format: BACKUP_FORMAT,
     version: APP_VERSION,
     exportedAt: now.toISOString(),
     settings,
+    ...(layout ? { layout } : {}),
     lights: lights.map(({ hops, rssi, ping, lastPacket, identifyUntil, ...rest }) => rest)
   };
 }
 
 const LIGHT_FIELDS = ['id', 'name', 'room', 'unicast', 'watts', 'via'];  // Trường bắt buộc của đèn trong file sao lưu
 
-// Đọc file sao lưu. Trả về { ok, settings, lights } hoặc { ok: false, error }.
+// Đọc file sao lưu. Trả về { ok, settings, lights, layout } hoặc { ok: false, error }.
+// File có sơ đồ nhà (bản 2.0) → phòng của đèn kiểm theo sơ đồ đó; file cũ → theo validRooms.
 export function parseBackup(text, validRooms) {
   let data;
   try {
@@ -88,6 +91,13 @@ export function parseBackup(text, validRooms) {
   }
   if (!data || data.format !== BACKUP_FORMAT) return { ok: false, error: 'Không phải file sao lưu HomeMesh.' };
   if (!Array.isArray(data.lights) || data.lights.length === 0) return { ok: false, error: 'File không có danh sách đèn.' };
+  let layout = null;
+  if (data.layout !== undefined) {
+    const errors = validateLayout(data.layout);
+    if (errors.length) return { ok: false, error: `Sơ đồ nhà trong file lỗi: ${errors[0]}.` };
+    layout = data.layout;
+    validRooms = layout.rooms.map((r) => r.id);
+  }
 
   const ids = new Set();
   for (const l of data.lights) {
@@ -97,7 +107,7 @@ export function parseBackup(text, validRooms) {
     if (ids.has(l.id)) return { ok: false, error: `Trùng ID đèn: ${l.id}.` };
     ids.add(l.id);
   }
-  return { ok: true, settings: sanitizeSettings(data.settings), lights: data.lights };
+  return { ok: true, settings: sanitizeSettings(data.settings), lights: data.lights, layout };
 }
 
 // Theme thật sự áp dụng khi chọn "system".

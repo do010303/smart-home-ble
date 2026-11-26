@@ -12,8 +12,12 @@ import {
 } from './mesh.js';
 import {
   DEFAULT_FIRMWARE, DEFAULT_LIGHTS, DEFAULT_LIGHT_STATE, NEW_DEVICE_CANDIDATES, ROOMS, SCENES,
-  GATEWAY_FLOORPLAN_POS, FLOORS, FURNITURE, ROOM_PRESETS
+  GATEWAY_FLOORPLAN_POS, FLOORS, FURNITURE, applyLayout, presetsFor
 } from './data.js';
+import {
+  LAYOUT_KEY, ROOM_TYPES, TEMPLATES, addRoom, bboxOf, clampInto, createHistory, fromTemplate, moveRoom,
+  areaText, nearestRoom, normalizeLayout, relocateLights, removeRoom, resizeRoom, roomAt, sizeText, snap, updateRoom, wallsOf
+} from './layout.js';
 import { FLOOR_PATTERNS, furnitureSvg } from './ui/furniture2d.js';
 import { executeApiRequest, registerGlobalApi } from './api.js';
 import { MAC_RE, SETTINGS_KEY, gatewayBaseUrl, resolveTheme, sanitizeSettings } from './settings.js';
@@ -39,7 +43,8 @@ const TECH_VIEWS = new Set(['mesh', 'log']);
 const openRooms = new Set(); // phòng đang mở danh sách đèn
 
 const nextTid = createTidCounter();  // Bộ đếm TID 0–255 cho mỗi gói (đèn bỏ gói lặp)
-const roomById = new Map(ROOMS.map((r) => [r.id, r]));  // Map id phòng → phòng, tra nhanh
+const roomById = new Map();  // Map id phòng → phòng, tra nhanh (dựng lại mỗi khi sơ đồ đổi)
+const indexRooms = () => { roomById.clear(); ROOMS.forEach((r) => roomById.set(r.id, r)); };
 
 const state = {  // Toàn bộ trạng thái app trong một object
   view: 'home',
@@ -55,6 +60,9 @@ const state = {  // Toàn bộ trạng thái app trong một object
   openLightId: null,
   appliedScene: null,
   provisionTarget: null,
+  layout: null,     // sơ đồ nhà người dùng (js/layout.js)
+  editing: false,   // đang ở chế độ Sửa sơ đồ
+  selectedRoom: null,
   fpOptions: { glow: true, links: false, labels: true, mode: '2d' }
 };
 
@@ -79,8 +87,13 @@ function load() {  // Đọc đèn và cài đặt từ localStorage lúc mở a
   // Bản cũ lưu theme riêng: chuyển sang cài đặt mới.
   const legacyTheme = readStorage(THEME_KEY);
   if (!savedSettings && (legacyTheme === 'dark' || legacyTheme === 'light')) state.settings.theme = legacyTheme;
+  let savedLayout = null;
+  try { savedLayout = JSON.parse(readStorage(LAYOUT_KEY) || 'null'); } catch { savedLayout = null; }
+  state.layout = normalizeLayout(savedLayout);
+  applyLayout(state.layout);
+  indexRooms();
   const lights = saved?.lights?.length ? saved.lights : DEFAULT_LIGHTS.map((l) => ({ ...l, ...DEFAULT_LIGHT_STATE }));
-  state.lights = withDerived(lights);
+  state.lights = withDerived(relocateLights(lights.map((l) => ({ ...l, fx: l.fx ?? l.x, fy: l.fy ?? l.y })), ROOMS).lights);
   state.path = saved?.path in PATHS ? saved.path : state.settings.defaultPath;
   state.gatewayOnline = saved?.gatewayOnline ?? true;
 }
@@ -90,6 +103,7 @@ function save() {  // Ghi đèn, đường truyền, gateway, cài đặt vào l
     const lights = state.lights.map(({ hops, rssi, ping, lastPacket, identifyUntil, ...rest }) => rest);
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ lights, path: state.path, gatewayOnline: state.gatewayOnline }));
     localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+    localStorage.setItem(LAYOUT_KEY, JSON.stringify(state.layout));
   } catch {
     /* localStorage có thể bị chặn — demo vẫn chạy bình thường */
   }
@@ -245,6 +259,7 @@ function setLight(id, patch, { ack = true, send = true } = {}) {  // Đổi mộ
 }
 
 function setRoom(roomId, patch, { ack = true } = {}) {  // Đổi cả phòng bằng một gói tới địa chỉ group của phòng
+  if (!roomById.has(roomId)) return;  // phòng không còn trong sơ đồ
   const lights = roomLights(roomId);
   if (lights.length === 0) return;
   lights.forEach((l) => Object.assign(l, patch));
@@ -331,8 +346,9 @@ function moveLight(id, roomId) {
   light.lastPacket = entry;
   light.room = roomId;
   const b = room.bounds;
-  light.fx = Math.round(b.x + 8 + Math.random() * (b.w - 16));
-  light.fy = Math.round(b.y + 10 + Math.random() * (b.h - 18));
+  const p = clampInto(b, b.x + b.w / 2 + (Math.random() - 0.5) * (b.w - 8), b.y + b.h / 2 + (Math.random() - 0.5) * (b.h - 8), 4);
+  light.fx = p.x;
+  light.fy = p.y;
   rebuildAll();
   return true;
 }
@@ -476,11 +492,11 @@ function roomSummary(roomId) {
 function activePreset(roomId) {
   const lights = roomLights(roomId);
   if (!lights.length || lights.some((l) => !l.on)) return null;
-  return (ROOM_PRESETS[roomId] || []).find((p) => lights.every((l) => l.kelvin === p.kelvin && l.lightness === p.lightness))?.id ?? null;
+  return presetsFor(roomById.get(roomId)).find((p) => lights.every((l) => l.kelvin === p.kelvin && l.lightness === p.lightness))?.id ?? null;
 }
 
 function applyRoomPreset(roomId, presetId) {  // Áp một kiểu sáng có sẵn cho cả phòng
-  const preset = (ROOM_PRESETS[roomId] || []).find((p) => p.id === presetId);
+  const preset = presetsFor(roomById.get(roomId)).find((p) => p.id === presetId);
   const room = roomById.get(roomId);
   if (!preset || !room) return;
   setRoom(roomId, { on: true, kelvin: preset.kelvin, lightness: preset.lightness });
@@ -499,7 +515,7 @@ function focusRoom(roomId) {
 function buildHome() {  // Dựng lại HTML các thẻ phòng (khi danh sách đèn đổi)
   $('#rooms').innerHTML = ROOMS.map((room) => {
     const lights = roomLights(room.id);
-    const presets = ROOM_PRESETS[room.id] || [];
+    const presets = presetsFor(room);
     const body = lights.length ? `
       <div class="preset-row" role="group" aria-label="Kiểu sáng ${room.name}">${presets.map((p) => `
         <button type="button" class="preset" data-preset="${p.id}" style="--c:${kelvinToHex(p.kelvin)}">
@@ -523,7 +539,7 @@ function buildHome() {  // Dựng lại HTML các thẻ phòng (khi danh sách �
           <label class="switch-row"><input type="checkbox" data-action="light-toggle" aria-label="Bật/tắt ${escapeHtml(l.name)}" /><span class="switch"></span></label>
           <button type="button" class="btn small-btn" data-open="${l.id}">Chỉnh</button>
         </div>`).join('')}
-      </details>` : '<p class="muted small">Phòng chưa có đèn. Vào <b>Thiết bị</b> để quét và thêm đèn.</p>';
+      </details>` : '<p class="muted small">Phòng chưa có đèn. Bấm <b>+ Thêm đèn</b> để quét đèn mới, hoặc <b>✏️ Sửa sơ đồ</b> rồi kéo đèn có sẵn vào phòng này.</p>';
     return `
     <article class="room-card" data-room="${room.id}">
       <header class="room-card-head">
@@ -655,14 +671,16 @@ function buildFloorplan() {  // Vẽ toàn bộ sơ đồ 2D bằng SVG theo t�
       <stop offset="100%" stop-color="${kelvinToHex(l.kelvin)}" stop-opacity="0" />
     </radialGradient>`).join('');
 
-  // 2. Phòng & Tường ngăn kiến trúc
+  // 2. Nhãn phòng (tên, diện tích, số đèn) — co theo cỡ phòng
   const roomZones = ROOMS.map((r) => {
     const b = r.bounds;
+    const tw = Math.min(28, b.w - 4);
+    const tall = b.h >= 16;
     return `
       <g class="room-zone" data-fp-room="${r.id}">
-        <rect class="room-tag-bg" x="${b.x + 2}" y="${b.y + 2}" width="28" height="7.2" />
-        <text class="room-tag-text" x="${b.x + 16}" y="${b.y + 5.2}">${r.icon} ${r.name}</text>
-        <text class="room-tag-area" x="${b.x + 16}" y="${b.y + 8.2}">${r.area} m² · ${roomLights(r.id).length} đèn</text>
+        <rect class="room-tag-bg" x="${b.x + 2}" y="${b.y + 2}" width="${tw}" height="${tall ? 7.2 : 4.6}" />
+        <text class="room-tag-text" x="${b.x + 2 + tw / 2}" y="${b.y + 5.2}">${r.icon} ${escapeHtml(r.name)}</text>
+        ${tall ? `<text class="room-tag-area" x="${b.x + 2 + tw / 2}" y="${b.y + 8.2}">${areaText(b)} · ${roomLights(r.id).length} đèn</text>` : ''}
       </g>`;
   }).join('');
 
@@ -699,41 +717,32 @@ function buildFloorplan() {  // Vẽ toàn bộ sơ đồ 2D bằng SVG theo t�
     </g>`;
 
   svg.innerHTML = `
-    <defs>${FLOOR_PATTERNS}${defs}</defs>
+    <defs>${FLOOR_PATTERNS}${defs}<pattern id="fp-grid" width="10" height="10" x="4" y="4" patternUnits="userSpaceOnUse"><path d="M10 0H0V10" class="ed-grid-line" /></pattern></defs>
     <!-- Nền, sàn từng phòng, nội thất -->
     <rect class="fp-bg" x="0" y="0" width="100" height="100" rx="3" />
     ${ROOMS.map((r) => { const z = roomZone(r); return `<rect class="fp-floor" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" fill="url(#fp-${FLOORS[r.id] ?? 'wood'})" />`; }).join('')}
     <g class="fp-furniture">${furnitureSvg(FURNITURE)}</g>
     <!-- Phòng tối dần khi tắt đèn -->
     ${ROOMS.map((r) => { const z = roomZone(r); return `<rect class="fp-shade" data-shade="${r.id}" x="${z.x}" y="${z.y}" width="${z.w}" height="${z.h}" />`; }).join('')}
-    <rect class="fp-outer-wall" x="4" y="4" width="92" height="92" rx="2" />
-    
-    <!-- Tường ngăn phòng & Lối đi -->
-    <line class="fp-inner-wall" x1="48" y1="4" x2="48" y2="44" />
-    <line class="fp-inner-wall" x1="48" y1="56" x2="48" y2="96" />
-    <line class="fp-inner-wall" x1="4" y1="50" x2="44" y2="50" />
-    <line class="fp-inner-wall" x1="56" y1="50" x2="96" y2="50" />
-    
-    <!-- Cửa mở phòng -->
-    <line class="fp-door" x1="44" y1="50" x2="48" y2="46" />
-    <line class="fp-door" x1="56" y1="50" x2="52" y2="46" />
-    <line class="fp-door" x1="48" y1="56" x2="52" y2="60" />
+    ${state.editing ? '<rect class="ed-grid" x="4" y="4" width="92" height="92" fill="url(#fp-grid)" />' : ''}
+    <!-- Tường: cạnh của từng phòng (cạnh chung chỉ vẽ 1 lần) + tường bao -->
+    ${wallsOf(ROOMS).map(([x1, y1, x2, y2]) => `<line class="fp-inner-wall" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" />`).join('')}
+    ${(() => { const o = bboxOf(ROOMS); return `<rect class="fp-outer-wall" x="${o.x}" y="${o.y}" width="${o.w}" height="${o.h}" rx="1" />`; })()}
 
     ${roomZones}
     ${glows}
     ${links}
     ${gw}
+    ${editorLayer()}
     ${fixtures}
   `;
 
   updateFloorplan();
 }
 
-// Vùng sàn của phòng, kéo tới giữa tường ngăn.
+// Vùng sàn của phòng = đúng hình chữ nhật người dùng vẽ.
 function roomZone(room) {
-  const x = room.bounds.x < 48 ? 4 : 48;
-  const y = room.bounds.y < 50 ? 4 : 50;
-  return { x, y, w: (x === 4 ? 48 : 96) - x, h: (y === 4 ? 50 : 96) - y };
+  return room.bounds;
 }
 
 // Độ sáng cảm nhận trung bình của phòng (0–1), dùng để làm tối phòng trên bản 2D.
@@ -795,6 +804,7 @@ function flashFloorplan(targets) {  // Hiệu ứng gói tin chạy tới đèn 
 
 function bindFloorplan() {  // Gắn sự kiện sơ đồ: bấm đèn, bấm tên phòng, công tắc hiển thị, 2D/3D, ngày/đêm
   $('#floorplan-svg').addEventListener('click', (e) => {
+    if (state.editing) return;  // chế độ Sửa sơ đồ: bấm = chọn / kéo, không bật tắt đèn
     const fixture = e.target.closest('[data-fp-light]');
     if (!fixture) {
       const zone = e.target.closest('[data-fp-room]');
@@ -815,6 +825,7 @@ function bindFloorplan() {  // Gắn sự kiện sơ đồ: bấm đèn, bấm t
   });
 
   $('#floorplan-svg').addEventListener('dblclick', (e) => {
+    if (state.editing) return;
     const fixture = e.target.closest('[data-fp-light]');
     if (fixture) openSheet(fixture.dataset.fpLight);
   });
@@ -842,7 +853,9 @@ function bindFloorplan() {  // Gắn sự kiện sơ đồ: bấm đèn, bấm t
 
   $('#fp-mode').addEventListener('click', (e) => {
     const b = e.target.closest('[data-mode]');
-    if (b) setFloorplanMode(b.dataset.mode);
+    if (!b) return;
+    if (state.editing && b.dataset.mode === '3d') setEditing(false);
+    setFloorplanMode(b.dataset.mode);
   });
   $('#fp3d-reset').addEventListener('click', () => fp3d.api?.resetView());
   $('#fp3d-day').addEventListener('click', (e) => {
@@ -857,7 +870,7 @@ function bindFloorplan() {  // Gắn sự kiện sơ đồ: bấm đèn, bấm t
 
 // ---------------------------------------------------------------- 2b. Mô hình 3D (tải khi cần)
 const FP_MODE_KEY = 'homemesh-fp-mode';
-const fp3d = { api: null, loading: null };  // Giữ API mô hình 3D sau khi tải ({ sync, flash, … })
+const fp3d = { api: null, loading: null, gen: 0 };  // Giữ API mô hình 3D sau khi tải ({ sync, flash, … })
 
 function setFloorplanMode(mode, { quiet = false, lazy = false } = {}) {  // Chuyển 2D / 3D; lần đầu vào 3D thì tải module 3D
   state.fpOptions.mode = mode;
@@ -874,13 +887,17 @@ function setFloorplanMode(mode, { quiet = false, lazy = false } = {}) {  // Chuy
   if (lazy && state.view !== 'home') return; // dựng khi mở màn hình Nhà của tôi
   if (fp3d.loading) return;
   $('#fp3d-loading').hidden = false;
+  const gen = fp3d.gen;
   fp3d.loading = import('./ui/floorplan3d.js')
     .then((m) => m.mountFloorplan3D({
       host: $('#fp3d'), state, lightById,
       onToggle: (id) => { const l = lightById(id); if (l) setLight(id, { on: !l.on }); },
       onOpen: openSheet
     }))
-    .then((api) => { fp3d.api = api; })
+    .then((api) => {
+      if (gen !== fp3d.gen) { api.destroy?.(); return; }  // sơ đồ đã đổi trong lúc dựng
+      fp3d.api = api;
+    })
     .catch((err) => {
       console.warn('3D không khả dụng', err);
       fp3d.loading = null;
@@ -888,6 +905,291 @@ function setFloorplanMode(mode, { quiet = false, lazy = false } = {}) {  // Chuy
       setFloorplanMode('2d', { quiet: true });
     })
     .finally(() => { $('#fp3d-loading').hidden = true; });
+}
+
+// ---------------------------------------------------------------- 2c. Thiết kế nhà (chế độ Sửa sơ đồ)
+const layoutHistory = createHistory();  // Hoàn tác / Làm lại
+let drag = null;  // thao tác kéo đang diễn ra
+
+const snapshot = () => ({  // Ảnh chụp sơ đồ + vị trí đèn, dùng cho Hoàn tác
+  layout: state.layout,
+  lights: state.lights.map(({ id, room, fx, fy }) => ({ id, room, fx, fy }))
+});
+
+function invalidate3D() {  // Sơ đồ đổi → bỏ mô hình 3D cũ, dựng lại nếu đang xem 3D
+  fp3d.gen += 1;
+  if (!fp3d.api && !fp3d.loading) return;
+  fp3d.api?.destroy?.();
+  const old = $('#fp3d canvas');
+  old.replaceWith(old.cloneNode(false));  // bỏ hết listener cũ
+  $('#fp3d .fp3d-labels').innerHTML = '';
+  fp3d.api = null;
+  fp3d.loading = null;
+  if (state.fpOptions.mode === '3d') setFloorplanMode('3d', { quiet: true, lazy: true });
+}
+
+// Áp sơ đồ mới: đèn ra ngoài phòng được chuyển vào phòng chứa nó (gửi lệnh đổi group), lưu, vẽ lại.
+function commitLayout(next, { record = true, before = null } = {}) {
+  if (record) layoutHistory.push(before ?? snapshot());
+  state.layout = next;
+  applyLayout(next);
+  indexRooms();
+  const { lights, moved } = relocateLights(state.lights, ROOMS);
+  state.lights = withDerived(lights.map(({ hops, rssi, ...l }) => l));
+  moved.forEach(({ id, to }) => {
+    const l = lightById(id);
+    const { entry } = transmit({
+      bytes: encodeSubscriptionOverwrite({ elementAddress: l.unicast, groupAddress: roomById.get(to).group }),
+      dst: l.unicast, targets: [l], ack: true
+    });
+    l.lastPacket = entry;
+  });
+  if (state.selectedRoom && !roomById.has(state.selectedRoom)) state.selectedRoom = null;
+  rebuildAll();
+  if (state.view !== 'home') buildFloorplan();
+  invalidate3D();
+  renderEditor();
+  return moved.length;
+}
+
+function restoreSnapshot(snap) {  // Quay về một ảnh chụp (Hoàn tác / Làm lại)
+  snap.lights.forEach((p) => { const l = lightById(p.id); if (l) Object.assign(l, { room: p.room, fx: p.fx, fy: p.fy }); });
+  commitLayout(snap.layout, { record: false });
+}
+
+function undoLayout() {
+  const snap = layoutHistory.undo(snapshot());
+  if (snap) { restoreSnapshot(snap); toast('Đã hoàn tác'); }
+}
+function redoLayout() {
+  const snap = layoutHistory.redo(snapshot());
+  if (snap) { restoreSnapshot(snap); toast('Đã làm lại'); }
+}
+
+function editorLayer() {  // Lớp chỉnh sửa trên SVG: khung phòng kéo được + ô đổi cỡ
+  if (!state.editing) return '';
+  return ROOMS.map((r) => {
+    const b = r.bounds;
+    return `<g class="ed-room${r.id === state.selectedRoom ? ' is-selected' : ''}" data-ed-room="${r.id}">
+      <rect class="ed-room-rect" x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" />
+      <text class="ed-size" x="${b.x + b.w / 2}" y="${b.y + b.h - 2.2}">${sizeText(b)}</text>
+      <rect class="ed-handle" data-ed-resize="${r.id}" x="${b.x + b.w - 4.5}" y="${b.y + b.h - 4.5}" width="4" height="4" rx="0.8"><title>Kéo để đổi kích thước</title></rect>
+    </g>`;
+  }).join('');
+}
+
+function svgPoint(e) {  // Toạ độ chuột → toạ độ sơ đồ (0–100)
+  const svg = $('#floorplan-svg');
+  const pt = svg.createSVGPoint();
+  pt.x = e.clientX;
+  pt.y = e.clientY;
+  return pt.matrixTransform(svg.getScreenCTM().inverse());
+}
+
+function renderRoomForm() {  // Ô sửa tên / loại / xoá của phòng đang chọn
+  const r = roomById.get(state.selectedRoom);
+  $('#fp-room-form').hidden = !r;
+  if (!r) return;
+  if (document.activeElement !== $('#fp-room-name')) $('#fp-room-name').value = r.name;
+  $('#fp-room-type').value = r.type;
+  $('#fp-room-size').textContent = `${sizeText(r.bounds)} · ${areaText(r.bounds)} · ${roomLights(r.id).length} đèn`;
+}
+
+function renderEditor() {  // Thanh công cụ Sửa sơ đồ
+  $('#fp-editor').hidden = !state.editing;
+  $('#fp-edit').hidden = state.editing;
+  $('#floorplan-svg').classList.toggle('is-editing', state.editing);
+  $('#fp-undo').disabled = !layoutHistory.canUndo;
+  $('#fp-redo').disabled = !layoutHistory.canRedo;
+  renderRoomForm();
+}
+
+function selectRoom(id) {
+  state.selectedRoom = id;
+  buildFloorplan();
+  renderRoomForm();
+}
+
+function setEditing(on) {  // Bật / tắt chế độ Sửa sơ đồ (luôn ở bản 2D)
+  state.editing = on;
+  if (on && state.fpOptions.mode === '3d') setFloorplanMode('2d', { quiet: true });
+  if (!on) state.selectedRoom = null;
+  buildFloorplan();
+  renderEditor();
+  $('#fp-hint').textContent = on
+    ? '✏️ Kéo phòng để di chuyển, kéo ô vuông ở góc để đổi kích thước, kéo đèn tới chỗ mới. Bấm vào phòng để đổi tên, loại hoặc xoá.'
+    : '💡 Bấm vào đèn để bật/tắt, bấm tên phòng để chỉnh cả phòng.';
+}
+
+function placeLight(id, before) {  // Thả đèn: gán phòng theo vị trí, kéo vào trong phòng
+  const l = lightById(id);
+  const target = roomAt(ROOMS, l.fx, l.fy) ?? nearestRoom(ROOMS, l.fx, l.fy);
+  const p = clampInto(target.bounds, l.fx, l.fy);
+  l.fx = p.x;
+  l.fy = p.y;
+  layoutHistory.push(before);
+  if (target.id !== l.room) {
+    const { entry } = transmit({
+      bytes: encodeSubscriptionOverwrite({ elementAddress: l.unicast, groupAddress: target.group }),
+      dst: l.unicast, targets: [l], ack: true
+    });
+    l.lastPacket = entry;
+    l.room = target.id;
+    toast(`Đã chuyển “${l.name}” sang ${target.name}`);
+  }
+  rebuildAll();
+  renderEditor();
+}
+
+const TEMPLATE_COLORS = { wood: '#c9a27a', tile: '#b9c4cf' };
+function templatePreview(t) {  // Hình thu nhỏ của mẫu nhà
+  return `<svg viewBox="0 0 100 100" aria-hidden="true">${t.rooms.map((r) => {
+    const b = r.bounds;
+    return `<rect x="${b.x}" y="${b.y}" width="${b.w}" height="${b.h}" fill="${TEMPLATE_COLORS[ROOM_TYPES[r.type].floor]}" stroke="#3a3f47" stroke-width="1.2" />
+      <text x="${b.x + b.w / 2}" y="${b.y + b.h / 2 + 3}" font-size="${Math.min(9, b.w / 3, b.h / 2)}" text-anchor="middle">${ROOM_TYPES[r.type].icon}</text>`;
+  }).join('')}</svg>`;
+}
+
+function openTemplates() {  // Hộp chọn mẫu nhà
+  $('#template-list').innerHTML = Object.entries(TEMPLATES).map(([id, t]) => `
+    <button type="button" class="template-card" data-template="${id}">
+      ${templatePreview(t)}
+      <b>${t.label}</b><small>${t.desc}</small>
+    </button>`).join('');
+  $('#template-dialog').showModal();
+}
+
+function applyTemplate(id) {
+  $('#template-dialog').close();
+  commitLayout(fromTemplate(id));
+  state.selectedRoom = null;
+  toast(`Đã dùng mẫu “${TEMPLATES[id].label}”. Bấm ✏️ Sửa sơ đồ để chỉnh theo nhà bạn.`);
+  if (id === 'blank' || !state.editing) {
+    setView('home');
+    if (id === 'blank') setEditing(true);
+  }
+}
+
+function bindEditor() {  // Gắn sự kiện chế độ Sửa sơ đồ
+  const svg = $('#floorplan-svg');
+  $('#fp-add-type').innerHTML = $('#fp-room-type').innerHTML = Object.entries(ROOM_TYPES)
+    .map(([k, t]) => `<option value="${k}">${t.icon} ${t.label}</option>`).join('');
+
+  svg.addEventListener('pointerdown', (e) => {
+    if (!state.editing || e.button > 0) return;
+    const p = svgPoint(e);
+    const resize = e.target.closest('[data-ed-resize]');
+    const light = e.target.closest('[data-fp-light]');
+    const room = e.target.closest('[data-ed-room]');
+    if (resize) drag = { kind: 'resize', id: resize.dataset.edResize };
+    else if (light) drag = { kind: 'light', id: light.dataset.fpLight };
+    else if (room) drag = { kind: 'room', id: room.dataset.edRoom };
+    else { selectRoom(null); return; }
+    e.preventDefault();
+    svg.setPointerCapture(e.pointerId);
+    Object.assign(drag, {
+      x0: p.x, y0: p.y, moved: false, base: state.layout, before: snapshot(),
+      lights0: state.lights.map(({ id, room: r, fx, fy }) => ({ id, room: r, fx, fy }))
+    });
+    if (drag.kind !== 'light') { state.selectedRoom = drag.id; renderRoomForm(); }
+  });
+
+  svg.addEventListener('pointermove', (e) => {
+    if (!drag) return;
+    const p = svgPoint(e);
+    const dx = p.x - drag.x0;
+    const dy = p.y - drag.y0;
+    if (!drag.moved && Math.hypot(dx, dy) < 1) return;
+    drag.moved = true;
+    if (drag.kind === 'light') {
+      const l = lightById(drag.id);
+      const s0 = drag.lights0.find((x) => x.id === drag.id);
+      l.fx = Math.round(Math.min(96, Math.max(4, s0.fx + dx)) * 10) / 10;
+      l.fy = Math.round(Math.min(96, Math.max(4, s0.fy + dy)) * 10) / 10;
+      buildFloorplan();
+      return;
+    }
+    const r0 = drag.base.rooms.find((r) => r.id === drag.id);
+    const next = drag.kind === 'room'
+      ? moveRoom(drag.base, drag.id, dx, dy)
+      : resizeRoom(drag.base, drag.id, r0.bounds.w + dx, r0.bounds.h + dy);
+    svg.classList.toggle('ed-blocked', !next);  // chạm phòng khác / ra ngoài khung → đứng yên, viền đỏ
+    if (!next) return;
+    state.layout = next;
+    applyLayout(next);
+    indexRooms();
+    if (drag.kind === 'room') {  // đèn trong phòng đi theo phòng
+      const sdx = snap(dx);
+      const sdy = snap(dy);
+      drag.lights0.filter((x) => x.room === drag.id).forEach((x) => {
+        const l = lightById(x.id);
+        l.fx = x.fx + sdx;
+        l.fy = x.fy + sdy;
+      });
+    }
+    buildFloorplan();
+    renderRoomForm();
+  });
+
+  const end = () => {
+    if (!drag) return;
+    const d = drag;
+    drag = null;
+    svg.classList.remove('ed-blocked');
+    if (!d.moved) { buildFloorplan(); renderRoomForm(); return; }
+    if (d.kind === 'light') placeLight(d.id, d.before);
+    else commitLayout(state.layout, { before: d.before });
+  };
+  svg.addEventListener('pointerup', end);
+  svg.addEventListener('pointercancel', end);
+
+  $('#fp-edit').addEventListener('click', () => setEditing(true));
+  $('#fp-done').addEventListener('click', () => { setEditing(false); toast('Đã lưu sơ đồ nhà'); });
+  $('#fp-undo').addEventListener('click', undoLayout);
+  $('#fp-redo').addEventListener('click', redoLayout);
+  $('#fp-templates').addEventListener('click', openTemplates);
+  $('#fp-add-room').addEventListener('click', () => {
+    const res = addRoom(state.layout, $('#fp-add-type').value);
+    if (!res) { toast('Không còn chỗ trống — thu nhỏ hoặc dời bớt phòng khác'); return; }
+    commitLayout(res.layout);
+    selectRoom(res.room.id);
+    toast(`Đã thêm ${res.room.name}. Kéo để đặt đúng chỗ, kéo góc để đổi kích thước.`);
+  });
+  $('#fp-room-name').addEventListener('change', (e) => {
+    const next = updateRoom(state.layout, state.selectedRoom, { name: e.target.value });
+    if (!next) { toast('Tên phòng không được để trống'); renderRoomForm(); return; }
+    commitLayout(next);
+  });
+  $('#fp-room-type').addEventListener('change', (e) => {
+    const next = updateRoom(state.layout, state.selectedRoom, { type: e.target.value });
+    if (next) commitLayout(next);
+  });
+  $('#fp-room-delete').addEventListener('click', async () => {
+    const r = roomById.get(state.selectedRoom);
+    if (!r) return;
+    const n = roomLights(r.id).length;
+    const ok = await confirmAsk(`Xoá ${r.name}?`,
+      n ? `${n} đèn trong phòng sẽ chuyển sang phòng gần nhất. Có thể hoàn tác.` : 'Có thể hoàn tác bằng nút ↶.', 'Xoá phòng');
+    if (!ok) return;
+    const next = removeRoom(state.layout, r.id);
+    if (!next) { toast('Nhà cần ít nhất 1 phòng'); return; }
+    state.selectedRoom = null;
+    commitLayout(next);
+    toast(`Đã xoá ${r.name}`);
+  });
+  $('#template-list').addEventListener('click', (e) => {
+    const b = e.target.closest('[data-template]');
+    if (b) applyTemplate(b.dataset.template);
+  });
+  document.addEventListener('keydown', (e) => {  // Ctrl+Z / Ctrl+Y / Delete / Esc khi đang sửa
+    if (!state.editing || e.target.closest('input, select, textarea')) return;
+    const k = e.key.toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && k === 'z' && !e.shiftKey) { e.preventDefault(); undoLayout(); }
+    else if ((e.ctrlKey || e.metaKey) && (k === 'y' || (k === 'z' && e.shiftKey))) { e.preventDefault(); redoLayout(); }
+    else if ((k === 'delete' || k === 'backspace') && state.selectedRoom) { e.preventDefault(); $('#fp-room-delete').click(); }
+    else if (k === 'escape') setEditing(false);
+  });
+  renderEditor();
 }
 
 // ---------------------------------------------------------------- Kiểm tra gateway (Cài đặt → Mạng & gateway)
@@ -1286,9 +1588,8 @@ function quickProvision(target, roomId, name) {  // Tạo đèn mới sau 7 bư�
   const room = roomById.get(roomId) || ROOMS[0];
   const unicast = Math.max(1, ...state.lights.map((l) => l.unicast)) + 1;
   const parent = roomLights(room.id).find((l) => l.relay) ?? state.lights.find((l) => l.relay && l.hops === 1);
-  const bounds = room.bounds || { x: 20, y: 20, w: 30, h: 30 };
-  const fx = Math.round(bounds.x + 8 + Math.random() * (bounds.w - 16));
-  const fy = Math.round(bounds.y + 8 + Math.random() * (bounds.h - 16));
+  const bounds = room.bounds;
+  const { x: fx, y: fy } = clampInto(bounds, bounds.x + bounds.w / 2 + (Math.random() - 0.5) * (bounds.w - 8), bounds.y + bounds.h / 2 + (Math.random() - 0.5) * (bounds.h - 8), 4);
 
   const newLight = {
     id: nextLightId(),
@@ -1439,15 +1740,25 @@ function downloadJson(data, filename) {  // Tải object thành file .json
   setTimeout(() => URL.revokeObjectURL(a.href), 1000);
 }
 
+function replaceLayout(layout) {  // Thay sơ đồ (khôi phục từ file)
+  layoutHistory.clear();
+  commitLayout(normalizeLayout(layout), { record: false });
+}
+
 function replaceLights(lights) {  // Thay toàn bộ đèn (khôi phục từ file)
-  state.lights = withDerived(lights.map(({ hops, rssi, ...l }) => l));
+  state.lights = withDerived(relocateLights(lights.map(({ hops, rssi, ...l }) => l), ROOMS).lights);
   rebuildAll();
 }
 
 function resetAll() {  // Xoá hết về mặc định
   try {
-    [STORAGE_KEY, SETTINGS_KEY, THEME_KEY].forEach((k) => localStorage.removeItem(k));
+    [STORAGE_KEY, SETTINGS_KEY, THEME_KEY, LAYOUT_KEY].forEach((k) => localStorage.removeItem(k));
   } catch { /* bỏ qua */ }
+  layoutHistory.clear();
+  state.layout = fromTemplate('demo');
+  applyLayout(state.layout);
+  indexRooms();
+  invalidate3D();
   state.settings = sanitizeSettings(null);
   state.path = state.settings.defaultPath;
   state.gatewayOnline = true;
@@ -1463,7 +1774,7 @@ function context() {  // Gói các hàm / dữ liệu app.js cho module js/ui/ d
     state, $, $$, toast, escapeHtml, target, transmit, nextTid,
     lightById, roomLights, roomById, setLight, setRoom, recallScene, checkGateway,
     identifyLight, paintIdentify, renameLight, moveLight, removeLight, openProvisioning,
-    refresh, rebuildAll, replaceLights, resetAll, clearMetrics, updateSettings,
+    refresh, rebuildAll, replaceLights, replaceLayout, openTemplates, resetAll, clearMetrics, updateSettings,
     confirmAsk, copyText, downloadJson, latencyClass, effectivePath, showWelcome, setView
   };
 }
@@ -1481,6 +1792,7 @@ function bindShell() {  // Điều hướng, nút theme, nút ← Cài đặt, h
   $('#welcome-ok').addEventListener('click', () => {
     try { localStorage.setItem(WELCOME_KEY, '1'); } catch { /* bỏ qua */ }
     $('#welcome-dialog').close();
+    openTemplates();  // bước tiếp: chọn sơ đồ nhà
   });
 
   $('#sheet-identify').addEventListener('click', () => {
@@ -1505,6 +1817,7 @@ function init() {  // Chạy một lần khi trang mở
 
   bindHome();
   bindFloorplan();
+  bindEditor();
   bindSheet();
   bindMesh();
   bindProvisioning();

@@ -1,13 +1,62 @@
-# Test cases — HomeMesh MVP
+# Test cases — HomeMesh 2.0
 
-## Tự động
+Ba lớp kiểm thử, tất cả chạy tự động trong GitHub Actions trước mỗi lần deploy:
+
+| Lớp | Lệnh | Số test | Kiểm gì |
+|---|---|---|---|
+| Unit — lõi điều khiển | `node tests/model_test.mjs` | 30 | màu & PWM, gói tin BLE Mesh, độ trễ, API, cài đặt, sao lưu |
+| Unit — tài khoản | `node tests/auth_test.mjs` | 10 | đăng ký, đăng nhập, khoá 5 lần sai, quên / đổi mật khẩu |
+| Unit — thiết kế nhà | `node tests/layout_test.mjs` | 18 | mẫu nhà, chồng phòng, kéo / đổi cỡ, thêm / xoá, đèn đổi phòng, dữ liệu hỏng, hoàn tác |
+| E2E — kịch bản khách hàng | `npx playwright test` | 14 kịch bản × 2 thiết bị (máy tính, điện thoại Pixel 5) | xem bảng E01–E14 |
 
 ```bash
-node tests/model_test.mjs
-node tests/auth_test.mjs   # 10 test tài khoản
+npm test               # 58 unit test
+npx playwright test    # E2E
 ```
 
-30 test: giới hạn Kelvin, màu 2700/6500 K, trộn kênh PWM, công suất không đổi khi đổi màu, lightness perceptual → linear, mã hoá opcode/payload (gồm Health Attention, Config Node Reset, Subscription Overwrite), số segment, TID, topology ≤ 3 hop, worst-case LAN 3 hop < 50 ms, cloud > 50 ms, độ trễ group, độ trễ một chiều tách khỏi khứ hồi, hệ số tải mạng, thống kê và jitter, mặt bằng nhà, API (GET/PUT, cURL, DELETE, identify), cài đặt hợp lệ, sao lưu/khôi phục, lịch quét thiết bị, Web Bluetooth, nội thất nằm trong phòng, kiểu sáng theo phòng, MAC gateway.
+## Unit — thiết kế nhà (`tests/layout_test.mjs`)
+
+| ID | Nội dung | Kết quả |
+|---|---|---|
+| L01 | 5 mẫu nhà hợp lệ: không chồng phòng, trong khung, đủ lớn, group riêng | Đạt |
+| L02 | Mẫu 4 phòng giữ mã phòng & group của bản 1.x → đèn cũ không lạc phòng | Đạt |
+| L03 | Phát hiện 2 phòng chồng nhau; chạm cạnh không tính | Đạt |
+| L04 | Báo lỗi: 0 phòng, tên trống, < 1,2 m, ngoài khung, loại sai, trùng mã, thiếu kích thước | Đạt |
+| L05 | Bắt lưới 0,2 m; diện tích, kích thước theo mét | Đạt |
+| L06 | Dời phòng: nội thất đi theo; đè phòng khác / ra khung → từ chối; bản gốc không đổi | Đạt |
+| L07 | Đổi cỡ: tối thiểu 1,2 m, không lấn phòng bên, nội thất không vừa bị bỏ | Đạt |
+| L08 | Thêm phòng: tìm chỗ trống, tên tự đánh số, group mới; hết chỗ → báo | Đạt |
+| L09 | Tối đa 12 phòng | Đạt |
+| L10 | Xoá phòng: giữ ≥ 1 phòng, nội thất xoá theo | Đạt |
+| L11 | Đổi tên / loại: lọc ký tự HTML, tên trống bị từ chối, giữ dấu & | Đạt |
+| L12 | Sau khi sửa sơ đồ, đèn ngoài phòng chuyển vào phòng chứa nó / gần nhất | Đạt |
+| L13 | Tìm phòng theo điểm, phòng gần nhất, kéo điểm vào trong phòng | Đạt |
+| L14 | Tường chung chỉ vẽ 1 lần; khung bao đúng | Đạt |
+| L15 | localStorage hỏng → nhà mẫu; dữ liệu đúng được giữ | Đạt |
+| L16 | Mỗi loại phòng ≥ 3 kiểu sáng gợi ý trong 2700–6500 K | Đạt |
+| L17 | Hoàn tác / Làm lại, giới hạn bước | Đạt |
+| L18 | Sao lưu / khôi phục kèm sơ đồ; file 1.x vẫn đọc được; sơ đồ lỗi bị từ chối | Đạt |
+
+## E2E — kịch bản khách hàng (`tests/e2e/customer.spec.mjs`)
+
+| ID | Kịch bản | Kết quả mong đợi | Máy tính | Điện thoại |
+|---|---|---|---|---|
+| E01 | Mở `?view=devices` khi chưa đăng nhập | Sang trang đăng nhập; đăng nhập xong mở đúng Thiết bị | Đạt | Đạt |
+| E02 | Khách mới đăng ký → hướng dẫn → chọn mẫu Studio | 3 phòng đúng tên, đủ 8 đèn, avatar "KM" | Đạt | Đạt |
+| E03 | Mẫu "Tự vẽ từ đầu" → thêm phòng ngủ → đổi tên → xoá → hoàn tác | Phòng xuất hiện, đổi tên, mất, rồi quay lại | Đạt | Đạt |
+| E04 | Kéo phòng ngủ đè lên phòng khách | Viền đỏ khi kéo, thả ra phòng không đổi | Đạt | — (kéo chuột) |
+| E05 | Kéo ô góc phòng ngủ để thu nhỏ | Hiện "3,4 × 3,6 m" | Đạt | — |
+| E06 | Kéo đèn L1 từ phòng khách sang phòng ngủ | Thông báo "sang Phòng ngủ", phòng ngủ có 3 đèn | Đạt | — |
+| E07 | Chọn "Xem TV", tắt toàn nhà, tải lại trang | Vẫn 0/8 đèn bật, sơ đồ giữ nguyên | Đạt | Đạt |
+| E08 | Bấm 3D | Có mô hình 3D, hoặc tự về 2D nếu máy không có WebGL | Đạt | Đạt |
+| E09 | Đăng nhập, Nhà, Sửa sơ đồ, Cài đặt | Không trang nào tràn ngang | Đạt | Đạt |
+| E10 | Sao lưu ra file | File JSON có `layout` 4 phòng và 8 đèn | Đạt | Đạt |
+| E11 | Đặt tên phòng `<img src=x onerror=alert(1)>` | Hiện như chữ, không có thẻ `<img>` nào | Đạt | Đạt |
+| E12 | Quên mật khẩu → mã 6 số → mật khẩu mới | Vào được app | Đạt | Đạt |
+| E13 | Đăng xuất, mở lại app | Về đăng nhập, báo "Bạn đã đăng xuất.", app vẫn bị chặn | Đạt | Đạt |
+| E14 | Ghi dữ liệu sơ đồ hỏng vào localStorage, tải lại | App vẫn mở với căn hộ mẫu | Đạt | Đạt |
+
+Mọi kịch bản còn kiểm: **không có lỗi JavaScript** nào trong lúc chạy.
 
 ## Thủ công
 
@@ -58,3 +107,6 @@ node tests/auth_test.mjs   # 10 test tài khoản
 | 46 | Đăng ký mật khẩu `abc` | Báo "Mật khẩu cần ít nhất 8 ký tự" |
 | 47 | Cài đặt → Tài khoản → Đổi mật khẩu với mật khẩu hiện tại sai | Báo lỗi ngay ô Mật khẩu hiện tại |
 | 48 | Đăng xuất | Về trang đăng nhập, hiện "Bạn đã đăng xuất."; trạng thái đèn vẫn giữ |
+| 49 | Sửa sơ đồ trên điện thoại: chạm giữ rồi kéo phòng / đèn | Phòng, đèn đi theo ngón tay, trang không cuộn |
+| 50 | Chọn mẫu khác khi đã có đèn | Đèn tự xếp vào phòng gần nhất; Hoàn tác (↶) đưa về sơ đồ cũ |
+| 51 | Đang xem 3D, đổi sơ đồ | 3D dựng lại đúng phòng mới |

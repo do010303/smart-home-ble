@@ -2,7 +2,7 @@
 
 // Service worker: luôn lấy bản mới từ mạng, chỉ dùng bộ nhớ đệm khi offline.
 // Đổi CACHE khi phát hành bản mới để dọn cache cũ.
-const CACHE = 'homemesh-v1.3.0';
+const CACHE = 'homemesh-v2.0.0';
 const CORE = [  // Danh sách file nạp sẵn để chạy offline
   './',
   'index.html',
@@ -12,6 +12,7 @@ const CORE = [  // Danh sách file nạp sẵn để chạy offline
   'js/app.js',
   'js/api.js',
   'js/auth.js',
+  'js/layout.js',
   'js/cct.js',
   'js/data.js',
   'js/mesh.js',

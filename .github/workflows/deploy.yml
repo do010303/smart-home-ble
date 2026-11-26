@@ -1,6 +1,6 @@
 name: Test & deploy
 
-# Mỗi lần push lên main: chạy unit test, đạt thì đưa bản mới sang nhánh gh-pages
+# Mỗi lần push lên main: chạy unit test + E2E (Playwright), đạt thì đưa bản mới sang nhánh gh-pages
 # (GitHub Pages phục vụ nhánh này tại https://<user>.github.io/<repo>/).
 on:
   push:
@@ -24,10 +24,24 @@ jobs:
         with:
           node-version: 20
 
-      - name: Unit test
+      - name: Unit test (màu, gói tin, tài khoản, thiết kế nhà)
+        run: npm test
+
+      - name: Cài Playwright + Chromium
         run: |
-          node tests/model_test.mjs
-          node tests/auth_test.mjs
+          npm ci
+          npx playwright install --with-deps chromium
+
+      - name: E2E test theo kịch bản khách hàng (máy tính + điện thoại)
+        run: npx playwright test
+
+      - name: Lưu báo cáo E2E
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: playwright-report/
+          retention-days: 7
 
       - name: Deploy lên gh-pages
         run: |

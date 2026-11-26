@@ -973,3 +973,42 @@ select {
   .account-btn { padding: 3px; }
 }
 .account-card .field-row { grid-template-columns: minmax(0, 1fr) auto; }
+
+/* ---------- Thiết kế nhà (Sửa sơ đồ) ---------- */
+.fp-head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.fp-editor { margin: -4px 0 12px; display: flex; flex-direction: column; gap: 10px; }
+.fp-editor-bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.fp-editor-bar select { min-width: 0; max-width: 170px; }
+.fp-editor-bar #fp-done { margin-left: auto; }
+.icon-text { font-size: 17px; padding: 4px 11px; line-height: 1.2; }
+.fp-room-form {
+  margin-top: 12px;
+  display: flex; flex-wrap: wrap; gap: 10px; align-items: flex-end;
+  padding: 10px 12px; border: 1px solid var(--accent); border-radius: var(--radius-sm);
+  background: color-mix(in srgb, var(--accent) 7%, var(--surface));
+}
+.fp-room-form .field { margin-top: 0; flex: 1 1 150px; }
+.fp-room-form .tag { align-self: center; }
+#floorplan-svg.is-editing { touch-action: none; user-select: none; }
+.ed-grid-line { fill: none; stroke: var(--border); stroke-width: 0.15; }
+.ed-room-rect { fill: color-mix(in srgb, var(--accent) 6%, transparent); stroke: var(--accent); stroke-width: 0.4; stroke-dasharray: 1.4 1; cursor: move; }
+.ed-room.is-selected .ed-room-rect { fill: color-mix(in srgb, var(--accent) 16%, transparent); stroke-width: 0.7; stroke-dasharray: none; }
+.ed-blocked .ed-room.is-selected .ed-room-rect { stroke: var(--bad); fill: color-mix(in srgb, var(--bad) 14%, transparent); }
+.ed-handle { fill: var(--accent); stroke: var(--surface); stroke-width: 0.4; cursor: nwse-resize; }
+.ed-size { font-size: 2.4px; font-weight: 600; text-anchor: middle; fill: var(--text); paint-order: stroke; stroke: var(--surface); stroke-width: 0.6px; pointer-events: none; }
+#floorplan-svg.is-editing .room-zone, #floorplan-svg.is-editing .fp-glow, #floorplan-svg.is-editing .fp-mesh-link { pointer-events: none; }
+#floorplan-svg.is-editing .fp-fixture { cursor: grab; }
+.wide-sheet { width: min(720px, 100vw); }
+.template-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 12px; margin-top: 16px; }
+.template-card {
+  display: flex; flex-direction: column; gap: 4px; padding: 10px; text-align: left;
+  border: 1px solid var(--border); border-radius: var(--radius-sm); background: var(--surface-2);
+}
+.template-card:hover, .template-card:focus-visible { border-color: var(--accent); outline: none; }
+.template-card svg { width: 100%; aspect-ratio: 1; background: var(--surface); border-radius: 8px; margin-bottom: 4px; }
+.template-card b { font-size: 14px; }
+.template-card small { color: var(--muted); font-size: 12px; }
+@media (max-width: 760px) {
+  .fp-editor-bar #fp-done { margin-left: 0; }
+  .template-list { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

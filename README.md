@@ -12,7 +12,7 @@ Web app (cài được như ứng dụng điện thoại) cho hệ thống chi�
 
 | Màn hình | Nội dung |
 | --- | --- |
-| Nhà của tôi | Sơ đồ căn hộ 2D có nội thất hoặc **mô hình 3D** xoay được (mỗi đèn chiếu sáng thật theo màu và độ sáng), bấm đèn để bật/tắt; bên cạnh là **điều khiển theo phòng**: công tắc, độ sáng, màu, 3 kiểu sáng chọn nhanh riêng từng phòng (Đón khách, Bữa tối ấm, Ngủ ngon, Tập trung…), từng đèn trong phòng |
+| Nhà của tôi | **Tự thiết kế nhà**: chọn mẫu (1 PN, 2 PN, Studio, tự vẽ) rồi **✏️ Sửa sơ đồ** — thêm / kéo / đổi cỡ / đổi tên / xoá phòng, kéo đèn tới chỗ mới, hoàn tác. Sơ đồ căn hộ 2D có nội thất hoặc **mô hình 3D** xoay được (mỗi đèn chiếu sáng thật theo màu và độ sáng), bấm đèn để bật/tắt; bên cạnh là **điều khiển theo phòng**: công tắc, độ sáng, màu, 3 kiểu sáng chọn nhanh riêng từng phòng (Đón khách, Bữa tối ấm, Ngủ ngon, Tập trung…), từng đèn trong phòng |
 | Thiết bị | **Quét** đèn mới (radar, cường độ tín hiệu), **thêm** vào phòng qua provisioning 7 bước, **nháy nhận diện**, **đổi tên / chuyển phòng / xoá** khỏi mạng; thử **Bluetooth thật** của máy qua Web Bluetooth |
 | Chi tiết đèn | Slider gradient 2700–6500 K, preset, PWM kênh ấm/lạnh, công suất, gói tin hex, nháy nhận diện |
 | Cảnh | 6 cảnh, gọi cho toàn nhà hoặc từng phòng (Scene Recall) |
@@ -55,6 +55,7 @@ smart-home-ble/
 │   ├── app.js        # state, điều hướng, điều khiển đèn, các màn hình gốc
 │   ├── api.js        # REST API Gateway mô phỏng + window.HomeMeshAPI
 │   ├── auth.js       # tài khoản: băm mật khẩu, phiên, mã khôi phục
+│   ├── layout.js     # sơ đồ nhà: mẫu, kiểm tra hợp lệ, kéo / đổi cỡ, hoàn tác
 │   ├── cct.js        # màu & driver (Kelvin → RGB, trộn PWM, công suất)
 │   ├── mesh.js       # gói tin BLE Mesh, mô hình độ trễ một chiều / khứ hồi, jitter
 │   ├── data.js       # phòng, đèn, toạ độ mặt bằng, cảnh, thiết bị quét được
@@ -80,7 +81,9 @@ smart-home-ble/
 │   └── TEST_CASES.md
 └── tests/
     ├── model_test.mjs
-    └── auth_test.mjs
+    ├── auth_test.mjs
+    ├── layout_test.mjs
+    └── e2e/customer.spec.mjs   # Playwright, kịch bản khách hàng
 ```
 
 ## Chạy local
@@ -133,11 +136,11 @@ Vào `http://localhost:8080` (Chrome, Edge hoặc Firefox bản mới).
 Cần Node.js 18 trở lên.
 
 ```bash
-node tests/model_test.mjs
-node tests/auth_test.mjs
+npm test               # 58 unit test
+npm install && npx playwright test   # 14 kịch bản E2E × máy tính + điện thoại
 ```
 
-30 + 10 test. Tài khoản: email/mật khẩu hợp lệ, không lưu mật khẩu thô, phiên hết hạn, khoá sau 5 lần sai, quên mật khẩu bằng mã, đổi mật khẩu, xoá tài khoản. Còn lại: màu & PWM, mã hoá gói tin (gồm Health Attention, Node Reset, Subscription Overwrite), độ trễ một chiều / khứ hồi, quét thiết bị, cài đặt và sao lưu, API, vị trí nội thất, kiểu sáng theo phòng, MAC gateway.
+30 + 10 + 18 unit test. Tài khoản: email/mật khẩu hợp lệ, không lưu mật khẩu thô, phiên hết hạn, khoá sau 5 lần sai, quên mật khẩu bằng mã, đổi mật khẩu, xoá tài khoản. Còn lại: màu & PWM, mã hoá gói tin (gồm Health Attention, Node Reset, Subscription Overwrite), độ trễ một chiều / khứ hồi, quét thiết bị, cài đặt và sao lưu, API, vị trí nội thất, kiểu sáng theo phòng, MAC gateway.
 
 Test thủ công: `docs/TEST_CASES.md`.
 

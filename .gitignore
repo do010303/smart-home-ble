@@ -3,3 +3,5 @@ node_modules/
 *.log
 docs/tools/out/
 __pycache__/
+test-results/
+playwright-report/

@@ -1,5 +1,22 @@
 # Changelog
 
+## 2.0.0 — 26/11/2026
+
+Theo góp ý sau buổi thuyết trình: ứng dụng còn "cứng", căn hộ vẽ sẵn trong code, khách hàng không đưa được nhà mình vào.
+
+### Thêm
+- **Thiết kế nhà của tôi**: chọn **mẫu nhà** (Căn hộ mẫu 4 phòng, 1 PN, 2 PN, Studio, Tự vẽ từ đầu) ngay sau lần đăng nhập đầu tiên.
+- **✏️ Sửa sơ đồ**: thêm phòng theo 8 loại (khách, ngủ, bếp, làm việc, trẻ em, tắm, ban công, hành lang), kéo để dời, kéo góc để đổi cỡ (bắt lưới 0,2 m, hiện kích thước và m²), đổi tên, đổi loại, xoá; chặn phòng chồng nhau (viền đỏ); kéo đèn tới chỗ mới, đèn tự nhận phòng và gửi lệnh đổi group; **Hoàn tác / Làm lại** (Ctrl+Z / Ctrl+Y).
+- Kiểu sáng gợi ý theo **loại phòng**: phòng mới thêm có ngay 3 kiểu sáng.
+- Mô hình 3D và sơ đồ 2D tự dựng theo sơ đồ của khách.
+- Sao lưu / khôi phục gồm cả sơ đồ nhà; file 1.x vẫn đọc được.
+- `js/layout.js` (lõi, không đụng DOM) + `tests/layout_test.mjs` (18 test).
+- **E2E Playwright** `tests/e2e/` (14 kịch bản khách hàng × máy tính + điện thoại), chạy trong GitHub Actions trước khi deploy.
+
+### Sửa
+- Tên phòng do người dùng gõ được lọc ký tự HTML trước khi hiển thị.
+- `setRoom` bỏ qua phòng không còn trong sơ đồ (trước đây lỗi khi gọi API với mã phòng sai).
+
 ## 1.3.0 — 19/11/2026
 
 ### Thêm

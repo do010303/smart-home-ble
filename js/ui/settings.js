@@ -43,9 +43,9 @@ export function mountSettings(ctx) {
   }
 
   function backup() {  // Tải file sao lưu
-    const data = buildBackup({ settings: state.settings, lights: state.lights });
+    const data = buildBackup({ settings: state.settings, lights: state.lights, layout: state.layout });
     ctx.downloadJson(data, `homemesh-backup-${new Date().toISOString().slice(0, 10)}.json`);
-    ctx.toast(`Đã sao lưu ${state.lights.length} đèn và cài đặt`);
+    ctx.toast(`Đã sao lưu ${state.lights.length} đèn, sơ đồ nhà và cài đặt`);
   }
 
   async function restore(file) {  // Khôi phục từ file
@@ -55,11 +55,12 @@ export function mountSettings(ctx) {
     if (!result.ok) { ctx.toast(`Không khôi phục được: ${result.error}`); return; }
     const ok = await ctx.confirmAsk(
       'Khôi phục từ file?',
-      `Thay toàn bộ ${state.lights.length} đèn hiện tại bằng ${result.lights.length} đèn trong file, kèm cài đặt.`,
+      `Thay toàn bộ ${state.lights.length} đèn hiện tại bằng ${result.lights.length} đèn trong file, kèm cài đặt${result.layout ? ' và sơ đồ nhà' : ''}.`,
       'Khôi phục'
     );
     if (!ok) return;
     ctx.updateSettings(result.settings);
+    if (result.layout) ctx.replaceLayout(result.layout);
     ctx.replaceLights(result.lights);
     ctx.toast(`Đã khôi phục ${result.lights.length} đèn`);
   }
@@ -67,7 +68,7 @@ export function mountSettings(ctx) {
   async function factoryReset() {  // Khôi phục mặc định
     const ok = await ctx.confirmAsk(
       'Khôi phục mặc định?',
-      'Xoá mọi đèn đã thêm, cài đặt và số liệu đo trong trình duyệt này, đưa về 8 đèn mẫu ban đầu.',
+      'Xoá mọi đèn đã thêm, sơ đồ nhà, cài đặt và số liệu đo trong trình duyệt này, đưa về căn hộ mẫu với 8 đèn.',
       'Khôi phục mặc định'
     );
     if (!ok) return;

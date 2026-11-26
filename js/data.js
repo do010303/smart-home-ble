@@ -1,47 +1,22 @@
 'use strict';
 
-import { roomGroupAddress } from './mesh.js';
+import { ROOM_TYPES, deriveRoom, fromTemplate } from './layout.js';
 
-export const ROOMS = Object.freeze([  // 4 phòng: tên, group, diện tích, vùng trên mặt bằng
-  {
-    id: 'living',
-    name: 'Phòng khách',
-    icon: '🛋️',
-    group: roomGroupAddress(0),
-    area: 32,
-    bounds: { x: 4, y: 50, w: 44, h: 46 },
-    labelPos: { x: 26, y: 57 }
-  },
-  {
-    id: 'bedroom',
-    name: 'Phòng ngủ',
-    icon: '🛏️',
-    group: roomGroupAddress(1),
-    area: 20,
-    bounds: { x: 4, y: 4, w: 44, h: 44 },
-    labelPos: { x: 26, y: 11 }
-  },
-  {
-    id: 'kitchen',
-    name: 'Bếp & Bàn ăn',
-    icon: '🍳',
-    group: roomGroupAddress(2),
-    area: 24,
-    bounds: { x: 50, y: 4, w: 46, h: 44 },
-    labelPos: { x: 73, y: 11 }
-  },
-  {
-    id: 'office',
-    name: 'Phòng làm việc',
-    icon: '💻',
-    group: roomGroupAddress(3),
-    area: 18,
-    bounds: { x: 50, y: 50, w: 46, h: 46 },
-    labelPos: { x: 73, y: 57 }
-  }
-]);
+// Phòng, nội thất, sàn, vị trí gateway: dữ liệu SỐNG, nạp từ sơ đồ người dùng tự thiết kế (js/layout.js).
+// Các mảng / object giữ nguyên tham chiếu, applyLayout() thay nội dung bên trong → mọi module đang import đều thấy bản mới.
+export const ROOMS = [];  // { id, type, name, group, bounds, icon, floor, area, labelPos }
+export const FURNITURE = [];  // nội thất trên mặt bằng (toạ độ 0–100, 1 đơn vị ≈ 0,1 m)
+export const FLOORS = {};  // id phòng → 'wood' | 'tile'
+export const GATEWAY_FLOORPLAN_POS = { x: 48, y: 48 };  // Vị trí gateway trên mặt bằng
 
-export const GATEWAY_FLOORPLAN_POS = Object.freeze({ x: 48, y: 48 });  // Vị trí gateway trên mặt bằng
+export function applyLayout(layout) {  // Nạp sơ đồ vào ROOMS / FURNITURE / FLOORS / GATEWAY_FLOORPLAN_POS
+  ROOMS.splice(0, ROOMS.length, ...layout.rooms.map(deriveRoom));
+  FURNITURE.splice(0, FURNITURE.length, ...layout.furniture.map((f) => ({ ...f })));
+  Object.keys(FLOORS).forEach((k) => delete FLOORS[k]);
+  ROOMS.forEach((r) => { FLOORS[r.id] = r.floor; });
+  Object.assign(GATEWAY_FLOORPLAN_POS, layout.gateway);
+}
+applyLayout(fromTemplate('demo'));
 
 // via: node cha trong cây relay ('gateway' = nhận trực tiếp từ gateway).
 // x, y: vị trí trên sơ đồ mạng topology (0–100).
@@ -82,63 +57,7 @@ export const NEW_DEVICE_CANDIDATES = Object.freeze([  // Thiết bị chưa vào
 
 export const DEFAULT_FIRMWARE = '1.2.0';
 
-// Nội thất trên mặt bằng (cùng hệ toạ độ 0–100 như fx/fy; 1 đơn vị ≈ 0,1 m).
-// side: phía tựa lưng của sofa/ghế, phía đầu giường, hoặc phía áp tường của tủ/bếp.
-export const FLOORS = Object.freeze({ bedroom: 'wood', living: 'wood', kitchen: 'tile', office: 'wood' });  // Nội thất trên mặt bằng (cùng hệ toạ độ 0–100 như fx/fy; 1 đơn vị ≈ 0,1 m)
-
-export const FURNITURE = Object.freeze([  // 26 món nội thất trên mặt bằng
-  // Phòng ngủ
-  { room: 'bedroom', type: 'rug', x: 22, y: 20, w: 16, h: 22 },
-  { room: 'bedroom', type: 'bed', x: 5, y: 22, w: 21, h: 16, side: 'left' },
-  { room: 'bedroom', type: 'nightstand', x: 5, y: 16, w: 5, h: 5 },
-  { room: 'bedroom', type: 'nightstand', x: 5, y: 39, w: 5, h: 5 },
-  { room: 'bedroom', type: 'wardrobe', x: 34, y: 5, w: 13, h: 6, side: 'top' },
-  { room: 'bedroom', type: 'plant', x: 41, y: 41, w: 5, h: 5 },
-  // Bếp & bàn ăn
-  { room: 'kitchen', type: 'fridge', x: 89, y: 5, w: 7, h: 7, side: 'right' },
-  { room: 'kitchen', type: 'counter', x: 89, y: 12, w: 7, h: 26, side: 'right' },
-  { room: 'kitchen', type: 'stove', x: 90, y: 15, w: 5, h: 6 },
-  { room: 'kitchen', type: 'sink', x: 90, y: 27, w: 5, h: 6 },
-  { room: 'kitchen', type: 'table', x: 58, y: 21, w: 18, h: 10 },
-  { room: 'kitchen', type: 'chair', x: 60, y: 16, w: 5, h: 4.5, side: 'top' },
-  { room: 'kitchen', type: 'chair', x: 69, y: 16, w: 5, h: 4.5, side: 'top' },
-  { room: 'kitchen', type: 'chair', x: 60, y: 31.5, w: 5, h: 4.5, side: 'bottom' },
-  { room: 'kitchen', type: 'chair', x: 69, y: 31.5, w: 5, h: 4.5, side: 'bottom' },
-  // Phòng khách
-  { room: 'living', type: 'rug', x: 10, y: 70, w: 26, h: 18 },
-  { room: 'living', type: 'tv', x: 12, y: 61, w: 22, h: 4, side: 'top' },
-  { room: 'living', type: 'table', x: 16, y: 75, w: 13, h: 7, low: true },
-  { room: 'living', type: 'sofa', x: 9, y: 87, w: 28, h: 8, side: 'bottom' },
-  { room: 'living', type: 'armchair', x: 38, y: 72, w: 8, h: 9, side: 'right' },
-  { room: 'living', type: 'plant', x: 41, y: 89, w: 5, h: 5 },
-  // Phòng làm việc
-  { room: 'office', type: 'desk', x: 59, y: 62, w: 19, h: 8 },
-  { room: 'office', type: 'chair', x: 66, y: 71, w: 5.5, h: 5, side: 'bottom' },
-  { room: 'office', type: 'shelf', x: 91, y: 60, w: 5, h: 26, side: 'right' },
-  { room: 'office', type: 'armchair', x: 56, y: 85, w: 9, h: 9, side: 'left' },
-  { room: 'office', type: 'plant', x: 52, y: 61, w: 5, h: 5 }
-]);
-
 // Kiểu sáng chọn nhanh cho từng phòng: 1 chạm = 1 gói Light CTL Set tới group của phòng.
-export const ROOM_PRESETS = Object.freeze({
-  living: [
-    { id: 'guests', name: 'Đón khách', icon: '✨', kelvin: 5000, lightness: 100 },
-    { id: 'tv', name: 'Xem TV', icon: '📺', kelvin: 3000, lightness: 25 },
-    { id: 'relax', name: 'Thư giãn', icon: '🛋️', kelvin: 2700, lightness: 45 }
-  ],
-  bedroom: [
-    { id: 'read', name: 'Đọc sách', icon: '📖', kelvin: 4000, lightness: 75 },
-    { id: 'night', name: 'Ngủ ngon', icon: '🌙', kelvin: 2700, lightness: 8 },
-    { id: 'wake', name: 'Thức dậy', icon: '☀️', kelvin: 5000, lightness: 85 }
-  ],
-  kitchen: [
-    { id: 'cook', name: 'Nấu ăn', icon: '🍳', kelvin: 5000, lightness: 100 },
-    { id: 'dinner', name: 'Bữa tối ấm', icon: '🍽️', kelvin: 3000, lightness: 55 },
-    { id: 'late', name: 'Đêm khuya', icon: '🌙', kelvin: 2700, lightness: 20 }
-  ],
-  office: [
-    { id: 'focus', name: 'Tập trung', icon: '⚡', kelvin: 6500, lightness: 100 },
-    { id: 'meeting', name: 'Họp online', icon: '🎥', kelvin: 4500, lightness: 85 },
-    { id: 'break', name: 'Nghỉ ngơi', icon: '☕', kelvin: 3000, lightness: 40 }
-  ]
-});
+// theo LOẠI phòng (living, bedroom, …) — phòng mới thêm cũng có gợi ý.
+export const ROOM_PRESETS = Object.freeze(Object.fromEntries(Object.entries(ROOM_TYPES).map(([k, t]) => [k, t.presets])));
+export const presetsFor = (room) => ROOM_TYPES[room?.type]?.presets ?? [];  // Kiểu sáng gợi ý của 1 phòng

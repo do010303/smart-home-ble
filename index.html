@@ -92,10 +92,24 @@
         <div class="home-grid">
           <div class="card floorplan-card">
             <div class="card-head">
-              <h2>Căn hộ</h2>
-              <div class="segmented" role="radiogroup" aria-label="Kiểu xem" id="fp-mode">
-                <button type="button" role="radio" data-mode="2d" aria-checked="true">2D</button>
-                <button type="button" role="radio" data-mode="3d" aria-checked="false">3D</button>
+              <h2>Nhà của tôi</h2>
+              <div class="fp-head-actions">
+                <button type="button" class="btn small-btn" id="fp-edit">✏️ Sửa sơ đồ</button>
+                <div class="segmented" role="radiogroup" aria-label="Kiểu xem" id="fp-mode">
+                  <button type="button" role="radio" data-mode="2d" aria-checked="true">2D</button>
+                  <button type="button" role="radio" data-mode="3d" aria-checked="false">3D</button>
+                </div>
+              </div>
+            </div>
+            <!-- Thanh công cụ thiết kế nhà (chế độ Sửa sơ đồ) -->
+            <div class="fp-editor" id="fp-editor" hidden>
+              <div class="fp-editor-bar">
+                <select id="fp-add-type" aria-label="Loại phòng muốn thêm"></select>
+                <button type="button" class="btn" id="fp-add-room">+ Thêm phòng</button>
+                <button type="button" class="btn btn-ghost icon-text" id="fp-undo" title="Hoàn tác (Ctrl+Z)" aria-label="Hoàn tác">↶</button>
+                <button type="button" class="btn btn-ghost icon-text" id="fp-redo" title="Làm lại (Ctrl+Y)" aria-label="Làm lại">↷</button>
+                <button type="button" class="btn btn-ghost" id="fp-templates">Mẫu nhà…</button>
+                <button type="button" class="btn btn-primary" id="fp-done">Xong</button>
               </div>
             </div>
             <!-- SVG Bản vẽ nhà -->
@@ -110,6 +124,13 @@
                 </div>
                 <div class="fp3d-loading" id="fp3d-loading"><span class="spinner" aria-hidden="true"></span>Đang dựng mô hình 3D…</div>
               </div>
+            </div>
+            <!-- Phòng đang chọn (dưới sơ đồ để không đẩy sơ đồ khi chọn) -->
+            <div class="fp-room-form" id="fp-room-form" hidden>
+              <label class="field">Tên phòng <input type="text" id="fp-room-name" maxlength="30" /></label>
+              <label class="field">Loại phòng <select id="fp-room-type"></select></label>
+              <span class="tag" id="fp-room-size"></span>
+              <button type="button" class="btn btn-danger" id="fp-room-delete">Xoá phòng</button>
             </div>
                         <div class="floorplan-options">
               <label class="switch-row"><input type="checkbox" id="fp-glow" checked /><span class="switch" aria-hidden="true"></span>Quầng sáng</label>
@@ -560,6 +581,17 @@
     </form>
   </dialog>
 
+  <!-- MODAL: CHỌN MẪU NHÀ -->
+  <dialog class="sheet wide-sheet" id="template-dialog" aria-labelledby="tpl-title">
+    <form method="dialog" class="sheet-close-form"><button class="icon-btn" aria-label="Đóng">✕</button></form>
+    <div class="sheet-body">
+      <p class="eyebrow">Thiết kế nhà</p>
+      <h2 id="tpl-title">Nhà bạn giống mẫu nào nhất?</h2>
+      <p class="muted small">Chọn một mẫu rồi bấm <b>✏️ Sửa sơ đồ</b> để kéo, đổi cỡ, đổi tên phòng cho khớp nhà thật. Đèn đang có sẽ tự xếp vào phòng gần nhất.</p>
+      <div class="template-list" id="template-list"></div>
+    </div>
+  </dialog>
+
   <!-- MODAL: HƯỚNG DẪN LẦN ĐẦU -->
   <dialog class="sheet" id="welcome-dialog" aria-labelledby="welcome-title">
     <div class="sheet-body welcome">
@@ -570,9 +602,10 @@
         <li><b>Nhà của tôi</b> — bấm đèn trên sơ đồ để bật/tắt; mỗi phòng có kiểu sáng chọn nhanh (Đón khách, Thư giãn…) và thanh chỉnh độ sáng, màu.</li>
         <li><b>Cảnh</b> — đổi cả nhà một lần: Đọc sách, Xem phim, Đi ngủ…</li>
         <li><b>Thiết bị</b> — quét tìm đèn mới và thêm vào phòng.</li>
+        <li><b>✏️ Sửa sơ đồ</b> — vẽ lại các phòng cho giống nhà bạn: thêm, kéo, đổi cỡ, đặt đèn.</li>
       </ol>
       <p class="small muted">Trên điện thoại: mở menu trình duyệt → <b>Thêm vào Màn hình chính</b> để dùng như app.</p>
-      <button class="btn btn-primary full" type="button" id="welcome-ok">Bắt đầu</button>
+      <button class="btn btn-primary full" type="button" id="welcome-ok">Bắt đầu: chọn sơ đồ nhà</button>
     </div>
   </dialog>
 
